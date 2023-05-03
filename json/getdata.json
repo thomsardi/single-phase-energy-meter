@@ -1,0 +1,36 @@
+{
+    "pulse_data" : [
+        {
+            "pcnt" : 1,
+            "frequency" : 1000
+        },
+        {
+            "pcnt" : 2,
+            "frequency" : 2000
+        },
+        {
+            "pcnt" : 3,
+            "frequency" : 3000
+        },
+        {
+            "pcnt" : 4,
+            "frequency" : 4000
+        },
+        {
+            "pcnt" : 5,
+            "frequency" : 5000
+        },
+        {
+            "pcnt" : 6,
+            "frequency" : 6000
+        },
+        {
+            "pcnt" : 7,
+            "frequency" : 7000
+        },
+        {
+            "pcnt" : 8,
+            "frequency" : 8000
+        }
+    ]
+}
