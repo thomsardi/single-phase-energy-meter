@@ -10,6 +10,8 @@
 
 unsigned int number = 0;
 float coef_u = 0.125; // coefficient for voltage measurement, to get this value use the following formula coef u = voltage on voltmeter / reading frequency
+float coef_i = 0.013;
+float coef_p = 2.54;
 int ledcPin[8] = {4, 13, 14, 15, 16, 17, 18, 19};
 int pcntPin[8] = {21, 22, 23, 25, 26, 27, 32, 33};
 int freqPin_1 = 21;
@@ -17,11 +19,11 @@ int freqPin_2 = 22;
 int freqPin_3 = 23;
 int hfFreq = 1000000;
 int hfFreq2 = 2000000;
-int cfPin = 19; // pin for active power
+int cfPin = 19; // pin for active power value
 int cf1Pin = 18; // pin for voltage or current RMS depending on selPin
-int selPin = 23; // pin to switch measurement between voltage or current RMS
+int selPin = 23; // pin to switch measurement between voltage or current RMS (0 for current measurement, 1 for voltage measurement)
 bool isChanged = 0;
-int16_t highLimit = 30000;
+int16_t highLimit = 30000; // value for counter overflow
 
 hw_timer_t *timer = NULL;
 
@@ -38,11 +40,6 @@ volatile int overflow_2;
 int statusCheck, statusCheck2;
 
 portMUX_TYPE timerMux_1 = portMUX_INITIALIZER_UNLOCKED;
-portMUX_TYPE timerMux_2 = portMUX_INITIALIZER_UNLOCKED;
-
-xQueueHandle pcnt_evt_queue;   // A queue to handle pulse counter events
-pcnt_isr_handle_t user_isr_handle = NULL; //user's ISR service handle
-
 
 const int internalLed = 2; //internal led pin
 
@@ -61,58 +58,45 @@ AsyncWebServer server(80);
 typedef struct {
     int unit;  // the PCNT unit that originated an interrupt
     uint32_t status; // information on the event type that caused the interrupt
-    unsigned long timeStamp; // The time the event occured
+    int mult;
+    int readingFrequency;
 } pcnt_evt_t;
 
-// Define the ISR function to be called when the PCNT event occurs
-void IRAM_ATTR pcnt_isr_handler(void* arg) {
-  portENTER_CRITICAL_ISR(&timerMux_1);
-  overflow++;
-  isTriggered = true;
-  uint32_t status = PCNT.int_st.val;
-  // PCNT.int_clr.val = BIT(PCNT_UNIT_0);
-  PCNT.int_clr.val = status;
-  statusCheck = status;
-  portEXIT_CRITICAL_ISR(&timerMux_1);
-}
+pcnt_evt_t evt[8];
 
-/* Decode what PCNT's unit originated an interrupt
- * and pass this information together with the event type
- * and timestamp to the main program using a queue.
- */
+/**
+ * @brief ISR handler when PCNT event trigger
+ *        @note first, this handler will decode which interrupt is coming from by check the PCNT.int_st.val 
+ *              when it is coming from PCNT_UNIT0, the value will be 2^0 which equal to 1. same applies
+ *              when it is coming from another PCNT_UNIT, e.g PCNT_UNIT_1 will produce value equal to (2^1) = 2
+ *              just before this handler finish, it reset the PCNT interrupt status by set the PCNT.int_clr.val to 1
+ *              To reset the PCNT_UNIT_0, set the PCNT.int_clr.val to (2^0) = 1
+ *              To reset the PCNT_UNIT_1, set the PCNT.int_clr.val to (2^1) = 2
+ *              ...
+ *              ...
+ *              To reset the PCNT_UNIT_7, set the PCNT.int_clr.val to (2^7) = 256
+*/
 static void IRAM_ATTR pcnt_intr_handler(void *arg)
 {
-    portENTER_CRITICAL_ISR(&timerMux_1);
-    unsigned long currentMillis = millis(); //Time at instant ISR was called
-    uint32_t intr_status = PCNT.int_st.val;
-    int i = 0;
-    pcnt_evt_t evt;
-    // portBASE_TYPE HPTaskAwoken = pdFALSE;
+    portENTER_CRITICAL_ISR(&timerMux_1); // key to lock shared resource (variable), so the value doesn't changed by another program
+    unsigned long currentMillis = millis(); // Time at instant ISR was called
+    uint32_t intr_status = PCNT.int_st.val; // get the pcnt unit interrupt, PCNT_UNIT_0 = 1, PCNT_UNIT_1 = 2, .... PCNT_UNIT_7 = 256
     statusCheck = intr_status;
-    for (i = 0; i < PCNT_UNIT_MAX; i++) {
-        if (intr_status & (BIT(i))) {
-            mult[i]++;
+    for (int i = 0; i < PCNT_UNIT_MAX; i++) {
+        if (intr_status & (BIT(i))) // find the pcnt unit, BIT(i) = 1 << i, if bit AND result is 1 then the pcnt unit is found
+        {
+            evt[i].unit = i;
+            evt[i].mult++; // increment the multiplier
         }
     }
-    PCNT.int_clr.val = intr_status;
-    // overflow++;
-    // for (i = 0; i < PCNT_UNIT_MAX; i++) {
-    //     if (intr_status & (BIT(i))) {
-    //         evt.unit = i;
-    //         /* Save the PCNT event type that caused an interrupt
-    //            to pass it to the main program */
-    //         evt.status = PCNT.status_unit[i].val;
-    //         evt.timeStamp = currentMillis; 
-    //         PCNT.int_clr.val = BIT(i);
-    //         xQueueSendFromISR(pcnt_evt_queue, &evt, &HPTaskAwoken);
-    //         if (HPTaskAwoken == pdTRUE) {
-    //             portYIELD_FROM_ISR();
-    //         }
-    //     }
-    // }
-    portEXIT_CRITICAL_ISR(&timerMux_1);
+    PCNT.int_clr.val = intr_status; // reset the pcnt interrupt, set the corellated bit to 1 to reset
+    portEXIT_CRITICAL_ISR(&timerMux_1); // unlock the key
 }
 
+/**
+ * @brief ISR handler for timer interrupt
+ *        @note this function is an handler for timer interrupt, this will convert the PCNT pulse into frequency, and store the information into pcnt_evt_t struct
+*/
 void IRAM_ATTR onTimer()
 {
   pcnt_unit_t pcnt_unit[8] = {
@@ -127,127 +111,40 @@ void IRAM_ATTR onTimer()
   };
   for (size_t i = 0; i < PCNT_UNIT_MAX; i++)
   {
-    /* code */
-    pcnt_counter_pause(pcnt_unit[i]);
+    pcnt_counter_pause(pcnt_unit[i]); // pause the pcnt counter, so the values doesnt get updated
   }
   
   for (size_t i = 0; i < PCNT_UNIT_MAX; i++)
   {
     int16_t pulse = 0;
     pcnt_get_counter_value(pcnt_unit[i], &pulse);
-    readingFrequency[i] = mult[i] * highLimit + pulse;
-    mult[i] = 0;
-    pcnt_counter_clear(pcnt_unit[i]);
+    evt[i].readingFrequency = evt[i].mult * highLimit + pulse; // calculate the frequency, mult is multiplier (mult +1 for every 30000 pulse) then add the remainder of pulse
+    evt[i].mult = 0; // reset the multipier to 0
+    pcnt_counter_clear(pcnt_unit[i]); // clear the pcnt counter (set the counter to 0)
     
   }
   isTriggered = true;
   // digitalWrite(selPin, !digitalRead(selPin));
   for (size_t i = 0; i < PCNT_UNIT_MAX; i++)
   {
-    /* code */
-    pcnt_counter_resume(pcnt_unit[i]);
+    pcnt_counter_resume(pcnt_unit[i]); // resume pcnt pulse counting
   }
   
 }
 
-void IRAM_ATTR intHandler()
-{
-  // capturedTime = micros();
-  // interval = capturedTime - lastTime;
-  // lastTime = capturedTime;
-  // readingFrequency = 1000000 / interval;
-  if(pulse > 20000)
-  {
-    overflow++;
-    pulse = 0;
-  }
-  pulse++;
-}
 
-void set_high_speed_counter(int pin, int16_t highLimit, pcnt_unit_t unit, pcnt_channel_t channel, void (*fn)(void *))
-{
-  pcnt_config_t pcnt_config = {
-    .pulse_gpio_num = pin,    // set gpio for pulse input gpio
-    .ctrl_gpio_num = -1,            // no gpio for control
-    .lctrl_mode = PCNT_MODE_KEEP,   // when control signal is low, keep the primary counter mode
-    .hctrl_mode = PCNT_MODE_KEEP,   // when control signal is high, keep the primary counter mode
-    .pos_mode = PCNT_COUNT_INC,     // increment the counter on positive edge
-    .neg_mode = PCNT_COUNT_DIS,     // do nothing on falling edge
-    .counter_h_lim = highLimit,
-    .counter_l_lim = 0,
-    .unit = unit,               /*!< PCNT unit number */
-    .channel = channel
-  }; 
-  pcnt_unit_config(&pcnt_config);
-  // Enable the PCNT interrupt
-  pcnt_event_enable(unit, PCNT_EVT_H_LIM);
-
-  pcnt_counter_pause(unit);
-  pcnt_counter_clear(unit);
-
-  pcnt_isr_register(fn, NULL, 0, NULL);
-  pcnt_intr_enable(unit);
-  // Start the PCNT counter
-  pcnt_counter_resume(unit);
-
-}
-
-void set_pcnt0(int pin, int16_t highLimit)
-{
-  pcnt_config_t pcnt_config = {
-    .pulse_gpio_num = pin,    // set gpio for pulse input gpio
-    .ctrl_gpio_num = -1,            // no gpio for control
-    .lctrl_mode = PCNT_MODE_KEEP,   // when control signal is low, keep the primary counter mode
-    .hctrl_mode = PCNT_MODE_KEEP,   // when control signal is high, keep the primary counter mode
-    .pos_mode = PCNT_COUNT_INC,     // increment the counter on positive edge
-    .neg_mode = PCNT_COUNT_DIS,     // do nothing on falling edge
-    .counter_h_lim = highLimit,
-    .counter_l_lim = 0,
-    .unit = PCNT_UNIT_1,               /*!< PCNT unit number */
-    .channel = PCNT_CHANNEL_0
-  }; 
-  pcnt_unit_config(&pcnt_config);
-  // Enable the PCNT interrupt
-  pcnt_event_enable(PCNT_UNIT_1, PCNT_EVT_H_LIM);
-
-  pcnt_counter_pause(PCNT_UNIT_1);
-  pcnt_counter_clear(PCNT_UNIT_1);
-
-  pcnt_isr_register(pcnt_intr_handler, NULL, 0, NULL);
-  pcnt_intr_enable(PCNT_UNIT_1);
-  // Start the PCNT counter
-  pcnt_counter_resume(PCNT_UNIT_1);
-
-}
-
-void set_pcnt1(int pin, int16_t highLimit)
-{
-  pcnt_config_t pcnt_config = {
-    .pulse_gpio_num = pin,    // set gpio for pulse input gpio
-    .ctrl_gpio_num = -1,            // no gpio for control
-    .lctrl_mode = PCNT_MODE_KEEP,   // when control signal is low, keep the primary counter mode
-    .hctrl_mode = PCNT_MODE_KEEP,   // when control signal is high, keep the primary counter mode
-    .pos_mode = PCNT_COUNT_INC,     // increment the counter on positive edge
-    .neg_mode = PCNT_COUNT_DIS,     // do nothing on falling edge
-    .counter_h_lim = highLimit,
-    .counter_l_lim = 0,
-    .unit = PCNT_UNIT_2,               /*!< PCNT unit number */
-    .channel = PCNT_CHANNEL_0
-  }; 
-  pcnt_unit_config(&pcnt_config);
-  // Enable the PCNT interrupt
-  pcnt_event_enable(PCNT_UNIT_2, PCNT_EVT_H_LIM);
-
-  pcnt_counter_pause(PCNT_UNIT_2);
-  pcnt_counter_clear(PCNT_UNIT_2);
-
-  pcnt_isr_register(pcnt_intr_handler, NULL, 0, NULL);
-  pcnt_intr_enable(PCNT_UNIT_2);
-  // Start the PCNT counter
-  pcnt_counter_resume(PCNT_UNIT_2);
-
-}
-
+/**
+ * @brief initialize Pulse Counter PCNT
+ *        @note this function will configure PCNT and register an event when counter reached high limit, the "pcnt_intr_handler" ISR registered as handler for this event
+ * 
+ * @param inputPin  input pulse signal pin
+ * @param lowLimit  low limit value to trigger an event
+ * @param hihgLimit high limit value to trigger an event
+ * @param unit      PCNT unit
+ *                  @note ESP32 has 8 PCNT unit start from PCNT_UNIT_0 - PCNT_UNIT_8, refer to "driver/pcnt.h" for more info
+ * @param channel   PCNT channel
+ *                  @note each PCNT unit has 2 channel which are PCNT_CHANNEL_0 & PCNT_CHANNEL_1, refer to "driver/pcnt.h" for more info 
+*/
 void initPcnt(int inputPin, int16_t lowLimit, int16_t highLimit, pcnt_unit_t unit, pcnt_channel_t channel)
 {
   pcnt_config_t pcnt_config = {
@@ -257,22 +154,22 @@ void initPcnt(int inputPin, int16_t lowLimit, int16_t highLimit, pcnt_unit_t uni
     .hctrl_mode = PCNT_MODE_KEEP,   // when control signal is high, keep the primary counter mode
     .pos_mode = PCNT_COUNT_INC,     // increment the counter on positive edge
     .neg_mode = PCNT_COUNT_DIS,     // do nothing on falling edge
-    .counter_h_lim = highLimit,
-    .counter_l_lim = 0,
+    .counter_h_lim = highLimit,     // set the higlimit counter
+    .counter_l_lim = 0,             // set the lowlimit counter
     .unit = unit,               /*!< PCNT unit number */
     .channel = channel
   }; 
-  pcnt_unit_config(&pcnt_config);
+  pcnt_unit_config(&pcnt_config); // pass the config parameter of pcnt
   // Enable the PCNT interrupt
-  pcnt_event_enable(unit, PCNT_EVT_H_LIM);
+  pcnt_event_enable(unit, PCNT_EVT_H_LIM); // register the event callback when counter reached the maximum counter limit according to pcnt_config
 
-  pcnt_counter_pause(unit);
-  pcnt_counter_clear(unit);
+  pcnt_counter_pause(unit); // pause the counter of pcnt unit
+  pcnt_counter_clear(unit); // clear the counter of pcnt unit
 
-  pcnt_isr_register(pcnt_intr_handler, NULL, 0, NULL);
-  pcnt_intr_enable(unit);
+  pcnt_isr_register(pcnt_intr_handler, NULL, 0, NULL); // register isr handler, when the event is triggered, the isr will be executed
+  pcnt_intr_enable(unit); // enable the interrupt of pcnt
   // Start the PCNT counter
-  pcnt_counter_resume(unit);
+  pcnt_counter_resume(unit); // resume the pcnt counting pulse
 }
 
 void set_clock_gpio(int freqPin, int channel)
@@ -282,11 +179,25 @@ void set_clock_gpio(int freqPin, int channel)
   ledcWrite(channel, 124); // set high duration to (124 / 128) * 100% = 96.875%
 }
 
+/**
+ * @brief function to produce a clock pulse using ledc driver
+ *        @note this function produce 50% duty cycle clock pulse
+ * @param freqPin output pin to produce the pulse signal
+ * @param channel ledc has 16 channel start from 0 - 15
+ *        @note channel 0 & 1 share same timer clock
+ *              channel 2 & 3 share same timer clock
+ *              channel 4 & 5 share same timer clock
+ *              ...
+ *              ...
+ *              channel 14 & 15 share same timer clock
+ *              pin with same timer clock will produce pulse with same frequency
+ * @param frequency frequency to set, unit in Hertz
+*/
 void set_clock_gpio_hf(int freqPin, int channel, int frequency)
 {
-  ledcSetup(channel, frequency, 1); // set resolution to 7 bit (2 ** 7 = 128), 1 bit represent (1 / 128) * 100% = 0.7%
+  ledcSetup(channel, frequency, 1); // set resolution to 1 bit (2^1 = 2), 1 bit represent (1 / 2) * 100% = 50%
   ledcAttachPin(freqPin, channel);
-  ledcWrite(channel, 1); // set high duration to (124 / 128) * 100% = 96.875%
+  ledcWrite(channel, 1); // set high duration to (1 / 2) * 100% = 50%
 }
 
 
@@ -326,8 +237,8 @@ String createJsonResponse() {
   for (size_t i = 0; i < PCNT_UNIT_MAX; i++)
   {
     JsonObject pulse_data_0 = pulse_data.createNestedObject();
-    pulse_data_0["pcnt"] = i+1;
-    pulse_data_0["frequency"] = readingFrequency[i];
+    pulse_data_0["pcnt"] = evt[i].unit;
+    pulse_data_0["frequency"] = evt[i].readingFrequency;
   }
   String output;
   serializeJson(doc, output);
@@ -391,6 +302,10 @@ void setup() {
   // initPcnt(cfPin, 0, highLimit, PCNT_UNIT_0, PCNT_CHANNEL_0); // pulse counter for active power
   // initPcnt(cf1Pin, 0, highLimit, PCNT_UNIT_1, PCNT_CHANNEL_0); // pulse counter for voltage or current rms
 
+
+  /**
+   * init pcnt unit and channel
+  */
   initPcnt(pcntPin[0], 0, highLimit, PCNT_UNIT_0, PCNT_CHANNEL_0);
   initPcnt(pcntPin[1], 0, highLimit, PCNT_UNIT_1, PCNT_CHANNEL_0);
   initPcnt(pcntPin[2], 0, highLimit, PCNT_UNIT_2, PCNT_CHANNEL_0);
@@ -400,6 +315,9 @@ void setup() {
   initPcnt(pcntPin[6], 0, highLimit, PCNT_UNIT_6, PCNT_CHANNEL_0);
   initPcnt(pcntPin[7], 0, highLimit, PCNT_UNIT_7, PCNT_CHANNEL_0);
 
+  /**
+   * set ledc output
+  */
   set_clock_gpio_hf(ledcPin[0], 0, 100000);
   set_clock_gpio_hf(ledcPin[1], 2, 200000);
   set_clock_gpio_hf(ledcPin[2], 4, 300000);
@@ -413,7 +331,7 @@ void setup() {
   // delay(100);
   // set_clock_gpio_hf(freqPin_2, 2, 500);
   // delay(100);
-  timerAlarmEnable(timer);
+  timerAlarmEnable(timer); // enable 1 second timer
 
 }
 
@@ -435,8 +353,8 @@ void loop() {
     for (size_t i = 0; i < PCNT_UNIT_MAX; i++)
     {
       /* code */
-      int voltage = static_cast<int>(readingFrequency[i]*coef_u);
-      Serial.println("Frequency " + String(i) + " : " + String(readingFrequency[i]) + " Hz");
+      int voltage = static_cast<int>(evt[i].readingFrequency*1000*coef_u); // unit in milli
+      Serial.println("Frequency " + String(i) + " : " + String(evt[i].readingFrequency) + " Hz");
       Serial.println("Voltage Reading " + String(i) + " : " + String(voltage) + " V");
       // readingFrequency[i] = 0;
     }
