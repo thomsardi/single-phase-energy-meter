@@ -4,6 +4,7 @@
 #include <ESPAsyncWebServer.h>
 #include <HTTPClient.h>
 #include <AsyncJson.h>
+#include <EnergyMeter.h>
 // #include "driver/ledc.h"
 #include "driver/pcnt.h"
 #include "soc/pcnt_struct.h"
@@ -52,6 +53,17 @@ int reconnectInterval = 5000;
 
 AsyncWebServer server(80);
 
+EnergyMeter energyMeter[8] = {
+  EnergyMeter(pcntPin[0], 5, 0, 0),
+  EnergyMeter(pcntPin[1], 5, 1, 0),
+  EnergyMeter(pcntPin[2], 5, 2, 0),
+  EnergyMeter(pcntPin[3], 5, 3, 0),
+  EnergyMeter(pcntPin[4], 5, 4, 0),
+  EnergyMeter(pcntPin[5], 5, 5, 0),
+  EnergyMeter(pcntPin[6], 5, 6, 0),
+  EnergyMeter(pcntPin[7], 5, 7, 0)
+};
+
 /* A sample structure to pass events from the PCNT
  * interrupt handler to the main program.
  */
@@ -82,54 +94,80 @@ static void IRAM_ATTR pcnt_intr_handler(void *arg)
     unsigned long currentMillis = millis(); // Time at instant ISR was called
     uint32_t intr_status = PCNT.int_st.val; // get the pcnt unit interrupt, PCNT_UNIT_0 = 1, PCNT_UNIT_1 = 2, .... PCNT_UNIT_7 = 256
     statusCheck = intr_status;
-    for (int i = 0; i < PCNT_UNIT_MAX; i++) {
-        if (intr_status & (BIT(i))) // find the pcnt unit, BIT(i) = 1 << i, if bit AND result is 1 then the pcnt unit is found
-        {
-            evt[i].unit = i;
-            evt[i].mult++; // increment the multiplier
-        }
+    for (size_t i = 0; i < 8; i++)
+    {
+      energyMeter[i].update(intr_status);
     }
+    
+    
+
+    // for (int i = 0; i < PCNT_UNIT_MAX; i++) {
+    //     if (intr_status & (BIT(i))) // find the pcnt unit, BIT(i) = 1 << i, if bit AND result is 1 then the pcnt unit is found
+    //     {
+    //         evt[i].unit = i;
+    //         evt[i].mult++; // increment the multiplier
+    //     }
+    // }
+    
+    
     PCNT.int_clr.val = intr_status; // reset the pcnt interrupt, set the corellated bit to 1 to reset
     portEXIT_CRITICAL_ISR(&timerMux_1); // unlock the key
 }
 
-/**
- * @brief ISR handler for timer interrupt
- *        @note this function is an handler for timer interrupt, this will convert the PCNT pulse into frequency, and store the information into pcnt_evt_t struct
-*/
+// /**
+//  * @brief ISR handler for timer interrupt
+//  *        @note this function is an handler for timer interrupt, this will convert the PCNT pulse into frequency, and store the information into pcnt_evt_t struct
+// */
+// void IRAM_ATTR onTimer()
+// {
+//   pcnt_unit_t pcnt_unit[8] = {
+//     PCNT_UNIT_0,
+//     PCNT_UNIT_1,
+//     PCNT_UNIT_2,
+//     PCNT_UNIT_3,
+//     PCNT_UNIT_4,
+//     PCNT_UNIT_5,
+//     PCNT_UNIT_6,
+//     PCNT_UNIT_7,
+//   };
+//   for (size_t i = 0; i < PCNT_UNIT_MAX; i++)
+//   {
+//     pcnt_counter_pause(pcnt_unit[i]); // pause the pcnt counter, so the values doesnt get updated
+//   }
+  
+//   for (size_t i = 0; i < PCNT_UNIT_MAX; i++)
+//   {
+//     int16_t pulse = 0;
+//     pcnt_get_counter_value(pcnt_unit[i], &pulse);
+//     evt[i].readingFrequency = evt[i].mult * highLimit + pulse; // calculate the frequency, mult is multiplier (mult +1 for every 30000 pulse) then add the remainder of pulse
+//     evt[i].mult = 0; // reset the multipier to 0
+//     pcnt_counter_clear(pcnt_unit[i]); // clear the pcnt counter (set the counter to 0)
+    
+//   }
+//   isTriggered = true;
+//   // digitalWrite(selPin, !digitalRead(selPin));
+//   for (size_t i = 0; i < PCNT_UNIT_MAX; i++)
+//   {
+//     pcnt_counter_resume(pcnt_unit[i]); // resume pcnt pulse counting
+//   }
+  
+// }
+
 void IRAM_ATTR onTimer()
 {
-  pcnt_unit_t pcnt_unit[8] = {
-    PCNT_UNIT_0,
-    PCNT_UNIT_1,
-    PCNT_UNIT_2,
-    PCNT_UNIT_3,
-    PCNT_UNIT_4,
-    PCNT_UNIT_5,
-    PCNT_UNIT_6,
-    PCNT_UNIT_7,
-  };
-  for (size_t i = 0; i < PCNT_UNIT_MAX; i++)
+  for (size_t i = 0; i < 8; i++)
   {
-    pcnt_counter_pause(pcnt_unit[i]); // pause the pcnt counter, so the values doesnt get updated
+    energyMeter[i].pause();
   }
   
-  for (size_t i = 0; i < PCNT_UNIT_MAX; i++)
+  for (size_t i = 0; i < 8; i++)
   {
-    int16_t pulse = 0;
-    pcnt_get_counter_value(pcnt_unit[i], &pulse);
-    evt[i].readingFrequency = evt[i].mult * highLimit + pulse; // calculate the frequency, mult is multiplier (mult +1 for every 30000 pulse) then add the remainder of pulse
-    evt[i].mult = 0; // reset the multipier to 0
-    pcnt_counter_clear(pcnt_unit[i]); // clear the pcnt counter (set the counter to 0)
-    
+    energyMeter[i].calculate();
+    energyMeter[i].clear();
+    energyMeter[i].resume();
   }
+  
   isTriggered = true;
-  // digitalWrite(selPin, !digitalRead(selPin));
-  for (size_t i = 0; i < PCNT_UNIT_MAX; i++)
-  {
-    pcnt_counter_resume(pcnt_unit[i]); // resume pcnt pulse counting
-  }
-  
 }
 
 
@@ -306,15 +344,32 @@ void setup() {
   /**
    * init pcnt unit and channel
   */
-  initPcnt(pcntPin[0], 0, highLimit, PCNT_UNIT_0, PCNT_CHANNEL_0);
-  initPcnt(pcntPin[1], 0, highLimit, PCNT_UNIT_1, PCNT_CHANNEL_0);
-  initPcnt(pcntPin[2], 0, highLimit, PCNT_UNIT_2, PCNT_CHANNEL_0);
-  initPcnt(pcntPin[3], 0, highLimit, PCNT_UNIT_3, PCNT_CHANNEL_0);
-  initPcnt(pcntPin[4], 0, highLimit, PCNT_UNIT_4, PCNT_CHANNEL_0);
-  initPcnt(pcntPin[5], 0, highLimit, PCNT_UNIT_5, PCNT_CHANNEL_0);
-  initPcnt(pcntPin[6], 0, highLimit, PCNT_UNIT_6, PCNT_CHANNEL_0);
-  initPcnt(pcntPin[7], 0, highLimit, PCNT_UNIT_7, PCNT_CHANNEL_0);
+  // initPcnt(pcntPin[0], 0, highLimit, PCNT_UNIT_0, PCNT_CHANNEL_0);
+  // initPcnt(pcntPin[1], 0, highLimit, PCNT_UNIT_1, PCNT_CHANNEL_0);
+  // initPcnt(pcntPin[2], 0, highLimit, PCNT_UNIT_2, PCNT_CHANNEL_0);
+  // initPcnt(pcntPin[3], 0, highLimit, PCNT_UNIT_3, PCNT_CHANNEL_0);
+  // initPcnt(pcntPin[4], 0, highLimit, PCNT_UNIT_4, PCNT_CHANNEL_0);
+  // initPcnt(pcntPin[5], 0, highLimit, PCNT_UNIT_5, PCNT_CHANNEL_0);
+  // initPcnt(pcntPin[6], 0, highLimit, PCNT_UNIT_6, PCNT_CHANNEL_0);
+  // initPcnt(pcntPin[7], 0, highLimit, PCNT_UNIT_7, PCNT_CHANNEL_0);
 
+  for (size_t i = 0; i < 8; i++)
+  {
+    energyMeter[i].registerHandler(pcnt_intr_handler);
+    energyMeter[i].setMode(0);
+    if (i%2)
+    {
+      energyMeter[i].setMode(3);
+    }
+
+  }
+
+  for (size_t i = 0; i < 8; i++)
+  {
+    energyMeter[i].start();
+  }
+  
+  
   /**
    * set ledc output
   */
@@ -346,18 +401,37 @@ void loop() {
     lastReconnectMillis = millis();
   }
   
+  // if(isTriggered)
+  // {
+  //   Serial.println("==========Frequency Measurement===========");
+  //   Serial.println("Measurement : " + String(number));
+  //   for (size_t i = 0; i < PCNT_UNIT_MAX; i++)
+  //   {
+  //     /* code */
+  //     int voltage = static_cast<int>(evt[i].readingFrequency*1000*coef_u); // unit in milli
+  //     Serial.println("Frequency " + String(i) + " : " + String(evt[i].readingFrequency) + " Hz");
+  //     Serial.println("Voltage Reading " + String(i) + " : " + String(voltage) + " V");
+  //     // readingFrequency[i] = 0;
+  //   }
+  //   Serial.println("==================End=====================");
+  //   isTriggered = false;
+  //   number++;
+  // }
+
   if(isTriggered)
   {
     Serial.println("==========Frequency Measurement===========");
     Serial.println("Measurement : " + String(number));
-    for (size_t i = 0; i < PCNT_UNIT_MAX; i++)
+    
+    for (size_t i = 0; i < 8; i++)
     {
-      /* code */
-      int voltage = static_cast<int>(evt[i].readingFrequency*1000*coef_u); // unit in milli
-      Serial.println("Frequency " + String(i) + " : " + String(evt[i].readingFrequency) + " Hz");
-      Serial.println("Voltage Reading " + String(i) + " : " + String(voltage) + " V");
-      // readingFrequency[i] = 0;
+      EnergyMeterData data = energyMeter[i].getEnergyMeterData();
+      Serial.println("Frequency " + String(data.unit) + " : " + String(data.frequency) + " Hz");
+      Serial.println("Voltage " + String(data.unit) + " : " + String(data.voltage) + " mV");
+      Serial.println("Current " + String(data.unit) + " : " + String(data.current) + " mA");
+      Serial.println("Power " + String(data.unit) + " : " + String(data.power) + " mW");
     }
+
     Serial.println("==================End=====================");
     isTriggered = false;
     number++;
