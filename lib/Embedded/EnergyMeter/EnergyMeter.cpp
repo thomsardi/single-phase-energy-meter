@@ -14,7 +14,14 @@ EnergyMeter::EnergyMeter(int pulseSignalPin, int selPin, int unit, int channel)
     _selPin = selPin;
     _unit = unit;
     _channel = channel;
-    pinMode(_selPin, OUTPUT);
+    if (_selPin < 0)
+    {
+        _isNoSelPin = true;
+    }
+    else
+    {
+        pinMode(_selPin, OUTPUT);
+    }
 }
 
 /**
@@ -81,7 +88,6 @@ void EnergyMeter::registerHandler(void (*pcnt_handler)(void *))
  *                          ...
  *                          ...
  *                          PCNT_UNIT_7 intr_status value is 2^7 = 256
- *                          by evaluate the intr_status, 
 */
 void EnergyMeter::update(uint32_t intr_status)
 {
@@ -92,30 +98,95 @@ void EnergyMeter::update(uint32_t intr_status)
     }
 }
 
+/**
+ * @brief   set calibrator value
+ * @param   coef_v  voltage coefficient
+ *          @note   to get this value, use this formula coef_v = voltage reading on voltmeter / reading frequency
+ * @param   coef_i  current coefficient
+ *          @note   to get this value, use this formula coef_i = current reading on amperemeter / reading frequency
+ * @param   coef_p  power coefficient
+ *          @note   to get this value, use this formula coef_p = power reading on wattmeter / reading frequency
+*/
+void EnergyMeter::setCalibrator(float coef_v, float coef_i, float coef_p)
+{
+    _coef_v = coef_v;
+    _coef_i = coef_i;
+    _coef_p = coef_p;
+}
+
+/**
+ * brief    set calibrator value
+ * @param   energyMeterCalibrator
+ *          @note   pass the struct of EnergyMeterCalibrator configuration to configure the calibrator
+*/
+void EnergyMeter::setCalibrator(const EnergyMeterCalibrator &energyMeterCalibrator)
+{
+    _coef_v = energyMeterCalibrator.coef_v;
+    _coef_i = energyMeterCalibrator.coef_i;
+    _coef_p = energyMeterCalibrator.coef_p;
+}
+
+/**
+ * @brief   set the mode for current or voltage rms measurement
+ * @param   mode    set the mode, 0 for current measurement, 1 for voltage measuremen, other value for power measurement
+*/
 void EnergyMeter::setMode(uint8_t mode)
 {
     _mode = mode;
-    if (_mode < 2)
+    if (_isNoSelPin)
     {
-        digitalWrite(_selPin, mode);
+        _mode = 2;
+        return;
+    }
+    if (_mode < 2 && _mode >= 0)
+    {
+        if(_mode == 0)
+        {
+            LOG_PRINTLN("Current Mode");
+        }
+        else
+        {
+            LOG_PRINTLN("Voltage Mode");
+        }
+        if (!_isNoSelPin)
+        {
+            digitalWrite(_selPin, mode);
+        }
+    }
+    else
+    {
+        _mode = 2;
+        LOG_PRINTLN("Power Mode");
     }
 }
 
+/**
+ * @brief   pause the pcnt counting pulse
+*/
 void EnergyMeter::pause()
 {
     pcnt_counter_pause(_pcnt_unit[_unit]);
 }
 
+/**
+ * @brief   clear the counter of pcnt
+*/
 void EnergyMeter::clear()
 {
     pcnt_counter_clear(_pcnt_unit[_unit]);
 }
 
+/**
+ * @brief   resume the pcnt counting pulse
+*/
 void EnergyMeter::resume()
 {
     pcnt_counter_resume(_pcnt_unit[_unit]);
 }
 
+/**
+ * @brief   calculate the frequency and convert it into voltage, current, power depending on the mode selected
+*/
 void EnergyMeter::calculate()
 {
     int16_t pulse = 0;
@@ -143,6 +214,19 @@ void EnergyMeter::calculate()
     _mult = 0;
 }
 
+/**
+ * @brief   get mode
+ * @return  mode of the class
+*/
+int EnergyMeter::getMode()
+{
+    return _mode;
+}
+
+/**
+ * @brief   get the energy meter data 
+ * @return  EnergyMeterData struct which consist of pcnt unit number, frequency, voltage, current, power
+*/
 EnergyMeterData EnergyMeter::getEnergyMeterData()
 {
     return _energyMeterData;

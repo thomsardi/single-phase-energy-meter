@@ -1,36 +1,60 @@
 {
-    "pulse_data" : [
+    "data" : [
         {
-            "pcnt" : 1,
-            "frequency" : 1000
+            "unit" : 1,
+            "frequency" : 1000,
+            "voltage" : 10,
+            "current" : 20,
+            "power" : 30
         },
         {
-            "pcnt" : 2,
-            "frequency" : 2000
+            "unit" : 2,
+            "frequency" : 1000,
+            "voltage" : 10,
+            "current" : 20,
+            "power" : 30
         },
         {
-            "pcnt" : 3,
-            "frequency" : 3000
+            "unit" : 3,
+            "frequency" : 1000,
+            "voltage" : 10,
+            "current" : 20,
+            "power" : 30
         },
         {
-            "pcnt" : 4,
-            "frequency" : 4000
+            "unit" : 4,
+            "frequency" : 1000,
+            "voltage" : 10,
+            "current" : 20,
+            "power" : 30
         },
         {
-            "pcnt" : 5,
-            "frequency" : 5000
+            "unit" : 5,
+            "frequency" : 1000,
+            "voltage" : 10,
+            "current" : 20,
+            "power" : 30
         },
         {
-            "pcnt" : 6,
-            "frequency" : 6000
+            "unit" : 6,
+            "frequency" : 1000,
+            "voltage" : 10,
+            "current" : 20,
+            "power" : 30
         },
         {
-            "pcnt" : 7,
-            "frequency" : 7000
+            "unit" : 7,
+            "frequency" : 1000,
+            "voltage" : 10,
+            "current" : 20,
+            "power" : 30
         },
         {
-            "pcnt" : 8,
-            "frequency" : 8000
+            "unit" : 8,
+            "frequency" : 1000,
+            "voltage" : 10,
+            "current" : 20,
+            "power" : 30
         }
     ]
 }
