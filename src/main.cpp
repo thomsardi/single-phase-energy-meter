@@ -16,9 +16,11 @@ HardwareSerial SerialPort(0);
 
 // Task handle and stack size
 TaskHandle_t serialTaskHandle;
+TaskHandle_t sendTaskHandle;
 const uint32_t stackSize = 4096;
 
 QueueHandle_t serialQueueHandle;
+QueueHandle_t blinkQueueHandle;
 const uint32_t queueSize = 10;
 
 unsigned int number = 0;
@@ -41,6 +43,8 @@ volatile bool isTriggered;
 int mode;
 
 portMUX_TYPE timerMux_1 = portMUX_INITIALIZER_UNLOCKED;
+
+SemaphoreHandle_t myLock = xSemaphoreCreateMutex();
 
 const int internalLed = 2; //internal led pin
 
@@ -188,31 +192,31 @@ void set_clock_gpio_hf(int freqPin, int channel, int frequency)
 
 void WiFiGotIP(WiFiEvent_t event, WiFiEventInfo_t info){
   digitalWrite(internalLed, HIGH);
-  SerialPort.print("Connected to ");
-  SerialPort.println(ssid);
-  SerialPort.print("IP address: ");
-  SerialPort.println(WiFi.localIP());
-  SerialPort.print("Subnet Mask: ");
-  SerialPort.println(WiFi.subnetMask());
-  SerialPort.print("Gateway IP: ");
-  SerialPort.println(WiFi.gatewayIP());
-  SerialPort.print("DNS 1: ");
-  SerialPort.println(WiFi.dnsIP(0));
-  SerialPort.print("DNS 2: ");
-  SerialPort.println(WiFi.dnsIP(1));
-  SerialPort.print("Hostname: ");
-  SerialPort.println(WiFi.getHostname());
+  // SerialPort.print("Connected to ");
+  // SerialPort.println(ssid);
+  // SerialPort.print("IP address: ");
+  // SerialPort.println(WiFi.localIP());
+  // SerialPort.print("Subnet Mask: ");
+  // SerialPort.println(WiFi.subnetMask());
+  // SerialPort.print("Gateway IP: ");
+  // SerialPort.println(WiFi.gatewayIP());
+  // SerialPort.print("DNS 1: ");
+  // SerialPort.println(WiFi.dnsIP(0));
+  // SerialPort.print("DNS 2: ");
+  // SerialPort.println(WiFi.dnsIP(1));
+  // SerialPort.print("Hostname: ");
+  // SerialPort.println(WiFi.getHostname());
 }
 
 void WiFiStationConnected(WiFiEvent_t event, WiFiEventInfo_t info){
-  SerialPort.println("Wifi Connected");
+  // SerialPort.println("Wifi Connected");
 }
 
 void WiFiStationDisconnected(WiFiEvent_t event, WiFiEventInfo_t info){
   digitalWrite(internalLed, LOW);
-  SerialPort.println("Disconnected from WiFi access point");
-  SerialPort.print("WiFi lost connection. Reason: ");
-  SerialPort.println(info.wifi_sta_disconnected.reason);
+  // SerialPort.println("Disconnected from WiFi access point");
+  // SerialPort.print("WiFi lost connection. Reason: ");
+  // SerialPort.println(info.wifi_sta_disconnected.reason);
 }
 
 String createJsonResponse() {
@@ -236,48 +240,79 @@ String createJsonResponse() {
 
 // SerialPort interrupt handler function
 void IRAM_ATTR serialInterrupt() {
+  BaseType_t xHigherPriorityTaskWoken = pdFALSE;
   // Read incoming data from SerialPort port
   // char receivedChar = SerialPort.read();
   bool receivedChar = true;
   // Send the received data to the SerialPort task
-  xQueueSendFromISR(serialQueueHandle, &receivedChar, NULL);
+  xQueueSendFromISR(serialQueueHandle, &receivedChar, &xHigherPriorityTaskWoken);
+  xQueueSendFromISR(serialQueueHandle, &receivedChar, &xHigherPriorityTaskWoken);
+  // xQueueSendFromISR(blinkQueueHandle, &receivedChar, NULL);
+  portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+}
+
+void sendTask(void* parameter)
+{
+  while (1)
+  {
+    uint8_t receivedFlag;
+    if (xSemaphoreTake(myLock, portMAX_DELAY) == pdTRUE)
+    {
+      SerialPort.println("This is scheduler");
+    }
+    xSemaphoreGive(myLock);
+    // if(xQueueReceive(serialQueueHandle, &receivedFlag, portMAX_DELAY) == pdTRUE)
+    // {
+    //   // SerialPort.println("Blink Task");
+    //   digitalWrite(internalLed, LOW);
+    //   vTaskDelay(pdMS_TO_TICKS(500));
+    //   digitalWrite(internalLed, HIGH);
+    //   vTaskDelay(pdMS_TO_TICKS(500));
+    // } 
+    vTaskDelay(pdMS_TO_TICKS(100));
+  }
 }
 
 void serialTask(void* parameter)
 {
-  while (1) {
+  while (1) 
+  {
     // Wait for data in the SerialPort queue
     uint8_t receivedData;
     // SerialPort.println("Serial Scheduler");
     // bool receivedData;
+    // UBaseType_t stackHighWaterMark = uxTaskGetStackHighWaterMark(sendTaskHandle);
+    // SerialPort.println(stackHighWaterMark);
     
-    if (xQueueReceive(serialQueueHandle, &receivedData, portMAX_DELAY) == pdTRUE) {
+    if (xQueueReceive(serialQueueHandle, &receivedData, portMAX_DELAY) == pdTRUE) 
+    {
       // Process the received data
       // ...
-      // SerialPort.print((char)receivedData);
-      while (SerialPort.available())
+      if (xSemaphoreTake(myLock, portMAX_DELAY) == pdTRUE)
       {
-        char data = SerialPort.read();
-        if(data == '\n')
+        while (SerialPort.available())
         {
-          if(dataString == "get-data")
+          char data = SerialPort.read();
+          if(data == '\n')
           {
-            SerialPort.println("Data : " + String(number));
-            String s = createJsonResponse();
-            SerialPort.println(s);
-            number++;
-            // SerialPort.println("Expected Json");
+            if(dataString == "get-data")
+            {
+              SerialPort.println("Data : " + String(number));
+              String s = createJsonResponse();
+              SerialPort.println(s);
+              number++;
+            }
+            dataString = "";
           }
-          dataString = "";
+          else
+          {
+            dataString += data;
+          }
+          // SerialPort.print(data);
         }
-        else
-        {
-          dataString += data;
-        }
-        // SerialPort.print(data);
+        xSemaphoreGive(myLock);        
       }
-      
-    }
+    }  
   }
 }
 
@@ -295,13 +330,13 @@ void setup() {
   SerialPort.setRxBufferSize(2048);
   SerialPort.begin(115200);
   SerialPort.setRxTimeout(1);
-  // while (!SerialPort);
-  SerialPort.println("TEST TEST TEST");
 
   serialQueueHandle = xQueueCreate(queueSize, sizeof(uint8_t));
+  blinkQueueHandle = xQueueCreate(queueSize, sizeof(uint8_t));
 
   // Create the serial task
   xTaskCreate(serialTask, "SerialTask", stackSize, NULL, 1, &serialTaskHandle);
+  xTaskCreate(sendTask, "SendTask", 1024, NULL, 1, &sendTaskHandle);
 
   // Set up the interrupt handler
   SerialPort.onReceive(serialInterrupt);
@@ -403,9 +438,9 @@ void setup() {
 void loop() {
   // SerialPort.println("TEST");
   if ((WiFi.status() != WL_CONNECTED) && (millis() - lastReconnectMillis >= reconnectInterval)) {
-    SerialPort.println("WiFi Disconnected");    
+    // SerialPort.println("WiFi Disconnected");    
     digitalWrite(internalLed, LOW);
-    SerialPort.println("Reconnecting to WiFi...");
+    // SerialPort.println("Reconnecting to WiFi...");
     WiFi.disconnect();
     WiFi.reconnect();
     lastReconnectMillis = millis();
