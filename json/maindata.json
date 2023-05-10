@@ -1,0 +1,259 @@
+{
+    "device_sn": "device_sn",
+    "ip": "0.0.0.0",
+    "type": "sdbctrl",
+    "data": [
+      {
+        "counter": 0,
+        "id": 100,
+        "device_name": "device_name_0",
+        "device_data": [
+          {
+            "unit": 0,
+            "frequency": 0,
+            "voltage": 0,
+            "current": 0,
+            "power": 0
+          },
+          {
+            "unit": 1,
+            "frequency": 10000,
+            "voltage": 1000,
+            "current": 100,
+            "power": 10
+          },
+          {
+            "unit": 2,
+            "frequency": 20000,
+            "voltage": 2000,
+            "current": 200,
+            "power": 20
+          },
+          {
+            "unit": 3,
+            "frequency": 30000,
+            "voltage": 3000,
+            "current": 300,
+            "power": 30
+          },
+          {
+            "unit": 4,
+            "frequency": 40000,
+            "voltage": 4000,
+            "current": 400,
+            "power": 40
+          },
+          {
+            "unit": 5,
+            "frequency": 50000,
+            "voltage": 5000,
+            "current": 500,
+            "power": 50
+          },
+          {
+            "unit": 6,
+            "frequency": 60000,
+            "voltage": 6000,
+            "current": 600,
+            "power": 60
+          },
+          {
+            "unit": 7,
+            "frequency": 70000,
+            "voltage": 7000,
+            "current": 700,
+            "power": 70
+          }
+        ]
+      },
+      {
+        "counter": 100,
+        "id": 101,
+        "device_name": "device_name_1",
+        "device_data": [
+          {
+            "unit": 8,
+            "frequency": 80000,
+            "voltage": 8000,
+            "current": 800,
+            "power": 80
+          },
+          {
+            "unit": 9,
+            "frequency": 90000,
+            "voltage": 9000,
+            "current": 900,
+            "power": 90
+          },
+          {
+            "unit": 10,
+            "frequency": 100000,
+            "voltage": 10000,
+            "current": 1000,
+            "power": 100
+          },
+          {
+            "unit": 11,
+            "frequency": 110000,
+            "voltage": 11000,
+            "current": 1100,
+            "power": 110
+          },
+          {
+            "unit": 12,
+            "frequency": 120000,
+            "voltage": 12000,
+            "current": 1200,
+            "power": 120
+          },
+          {
+            "unit": 13,
+            "frequency": 130000,
+            "voltage": 13000,
+            "current": 1300,
+            "power": 130
+          },
+          {
+            "unit": 14,
+            "frequency": 140000,
+            "voltage": 14000,
+            "current": 1400,
+            "power": 140
+          },
+          {
+            "unit": 15,
+            "frequency": 150000,
+            "voltage": 15000,
+            "current": 1500,
+            "power": 150
+          }
+        ]
+      },
+      {
+        "counter": 200,
+        "id": 102,
+        "device_name": "device_name_2",
+        "device_data": [
+          {
+            "unit": 16,
+            "frequency": 160000,
+            "voltage": 16000,
+            "current": 1600,
+            "power": 160
+          },
+          {
+            "unit": 17,
+            "frequency": 170000,
+            "voltage": 17000,
+            "current": 1700,
+            "power": 170
+          },
+          {
+            "unit": 18,
+            "frequency": 180000,
+            "voltage": 18000,
+            "current": 1800,
+            "power": 180
+          },
+          {
+            "unit": 19,
+            "frequency": 190000,
+            "voltage": 19000,
+            "current": 1900,
+            "power": 190
+          },
+          {
+            "unit": 20,
+            "frequency": 200000,
+            "voltage": 20000,
+            "current": 2000,
+            "power": 200
+          },
+          {
+            "unit": 21,
+            "frequency": 210000,
+            "voltage": 21000,
+            "current": 2100,
+            "power": 210
+          },
+          {
+            "unit": 22,
+            "frequency": 220000,
+            "voltage": 22000,
+            "current": 2200,
+            "power": 220
+          },
+          {
+            "unit": 23,
+            "frequency": 230000,
+            "voltage": 23000,
+            "current": 2300,
+            "power": 230
+          }
+        ]
+      },
+      {
+        "counter": 300,
+        "id": 103,
+        "device_name": "device_name_3",
+        "device_data": [
+          {
+            "unit": 24,
+            "frequency": 240000,
+            "voltage": 24000,
+            "current": 2400,
+            "power": 240
+          },
+          {
+            "unit": 25,
+            "frequency": 250000,
+            "voltage": 25000,
+            "current": 2500,
+            "power": 250
+          },
+          {
+            "unit": 26,
+            "frequency": 260000,
+            "voltage": 26000,
+            "current": 2600,
+            "power": 260
+          },
+          {
+            "unit": 27,
+            "frequency": 270000,
+            "voltage": 27000,
+            "current": 2700,
+            "power": 270
+          },
+          {
+            "unit": 28,
+            "frequency": 280000,
+            "voltage": 28000,
+            "current": 2800,
+            "power": 280
+          },
+          {
+            "unit": 29,
+            "frequency": 290000,
+            "voltage": 29000,
+            "current": 2900,
+            "power": 290
+          },
+          {
+            "unit": 30,
+            "frequency": 300000,
+            "voltage": 30000,
+            "current": 3000,
+            "power": 300
+          },
+          {
+            "unit": 31,
+            "frequency": 310000,
+            "voltage": 31000,
+            "current": 3100,
+            "power": 310
+          }
+        ]
+      }
+    ]
+  }

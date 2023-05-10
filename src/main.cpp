@@ -11,8 +11,10 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include <HardwareSerial.h>
+#include <JsonHandler.h>
 
 HardwareSerial SerialPort(0);
+JsonHandler jsonHandler;
 
 // Task handle and stack size
 TaskHandle_t serialTaskHandle;
@@ -20,9 +22,9 @@ TaskHandle_t sendTaskHandle;
 const uint32_t stackSize = 4096;
 
 QueueHandle_t serialQueueHandle;
-QueueHandle_t blinkQueueHandle;
 const uint32_t queueSize = 10;
 
+bool isReady;
 unsigned int number = 0;
 float coef_u = 0.125; // coefficient for voltage measurement, to get this value use the following formula coef u = voltage on voltmeter / reading frequency
 float coef_i = 0.013;
@@ -69,6 +71,11 @@ EnergyMeter energyMeter[8] = {
   EnergyMeter(pcntPin[6], 5, 6, 0),
   EnergyMeter(pcntPin[7], 5, 7, 0)
 };
+
+JsonData jsonData[8];
+JsonHeader jsonHeader;
+
+EnergyMeterData energyData[64]; //divided into a group for every 8
 
 /**
  * @brief ISR handler when PCNT event trigger
@@ -192,31 +199,31 @@ void set_clock_gpio_hf(int freqPin, int channel, int frequency)
 
 void WiFiGotIP(WiFiEvent_t event, WiFiEventInfo_t info){
   digitalWrite(internalLed, HIGH);
-  // SerialPort.print("Connected to ");
-  // SerialPort.println(ssid);
-  // SerialPort.print("IP address: ");
-  // SerialPort.println(WiFi.localIP());
-  // SerialPort.print("Subnet Mask: ");
-  // SerialPort.println(WiFi.subnetMask());
-  // SerialPort.print("Gateway IP: ");
-  // SerialPort.println(WiFi.gatewayIP());
-  // SerialPort.print("DNS 1: ");
-  // SerialPort.println(WiFi.dnsIP(0));
-  // SerialPort.print("DNS 2: ");
-  // SerialPort.println(WiFi.dnsIP(1));
-  // SerialPort.print("Hostname: ");
-  // SerialPort.println(WiFi.getHostname());
+  SerialPort.print("Connected to ");
+  SerialPort.println(ssid);
+  SerialPort.print("IP address: ");
+  SerialPort.println(WiFi.localIP());
+  SerialPort.print("Subnet Mask: ");
+  SerialPort.println(WiFi.subnetMask());
+  SerialPort.print("Gateway IP: ");
+  SerialPort.println(WiFi.gatewayIP());
+  SerialPort.print("DNS 1: ");
+  SerialPort.println(WiFi.dnsIP(0));
+  SerialPort.print("DNS 2: ");
+  SerialPort.println(WiFi.dnsIP(1));
+  SerialPort.print("Hostname: ");
+  SerialPort.println(WiFi.getHostname());
 }
 
 void WiFiStationConnected(WiFiEvent_t event, WiFiEventInfo_t info){
-  // SerialPort.println("Wifi Connected");
+  SerialPort.println("Wifi Connected");
 }
 
 void WiFiStationDisconnected(WiFiEvent_t event, WiFiEventInfo_t info){
   digitalWrite(internalLed, LOW);
-  // SerialPort.println("Disconnected from WiFi access point");
-  // SerialPort.print("WiFi lost connection. Reason: ");
-  // SerialPort.println(info.wifi_sta_disconnected.reason);
+  SerialPort.println("Disconnected from WiFi access point");
+  SerialPort.print("WiFi lost connection. Reason: ");
+  SerialPort.println(info.wifi_sta_disconnected.reason);
 }
 
 String createJsonResponse() {
@@ -247,7 +254,6 @@ void IRAM_ATTR serialInterrupt() {
   // Send the received data to the SerialPort task
   xQueueSendFromISR(serialQueueHandle, &receivedChar, &xHigherPriorityTaskWoken);
   xQueueSendFromISR(serialQueueHandle, &receivedChar, &xHigherPriorityTaskWoken);
-  // xQueueSendFromISR(blinkQueueHandle, &receivedChar, NULL);
   portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
 }
 
@@ -255,21 +261,48 @@ void sendTask(void* parameter)
 {
   while (1)
   {
-    uint8_t receivedFlag;
-    if (xSemaphoreTake(myLock, portMAX_DELAY) == pdTRUE)
+    if(isReady)
     {
-      SerialPort.println("This is scheduler");
+      uint8_t receivedFlag;
+      if (xSemaphoreTake(myLock, portMAX_DELAY) == pdTRUE)
+      {
+        // SerialPort.println("This is scheduler");
+        // for (size_t i = 0; i < 64; i++)
+        // {
+        //   SerialPort.println(energyData[i].unit);
+        // }
+        // SerialPort.println("================");
+        SerialPort.println("===========Begin=========");
+        for (size_t i = 0; i < 8; i++)
+        {
+          EnergyMeterData *ptr;
+          ptr = jsonData[i].dataPointer;
+          SerialPort.println("Display : " + String(i));
+          SerialPort.println("Counter : " + String(jsonData[i].counter));
+          SerialPort.println("ID : " + String(jsonData[i].id));
+          SerialPort.println("Device Name : " + String(jsonData[i].deviceName));
+          for (size_t j = 0; j < jsonData[i].energyMeterDataSize; j++)
+          {
+            SerialPort.println("Unit : " + String((ptr+j)->unit));
+            SerialPort.println("Frequency : " + String((ptr+j)->frequency));
+            SerialPort.println("Voltage : " + String((ptr+j)->voltage));
+            SerialPort.println("Current : " + String((ptr+j)->current));
+            SerialPort.println("Power : " + String((ptr+j)->power));
+          }
+        }
+        SerialPort.println("==========End===========");
+      }
+      xSemaphoreGive(myLock);
+      // if(xQueueReceive(serialQueueHandle, &receivedFlag, portMAX_DELAY) == pdTRUE)
+      // {
+      //   // SerialPort.println("Blink Task");
+      //   digitalWrite(internalLed, LOW);
+      //   vTaskDelay(pdMS_TO_TICKS(500));
+      //   digitalWrite(internalLed, HIGH);
+      //   vTaskDelay(pdMS_TO_TICKS(500));
+      // } 
     }
-    xSemaphoreGive(myLock);
-    // if(xQueueReceive(serialQueueHandle, &receivedFlag, portMAX_DELAY) == pdTRUE)
-    // {
-    //   // SerialPort.println("Blink Task");
-    //   digitalWrite(internalLed, LOW);
-    //   vTaskDelay(pdMS_TO_TICKS(500));
-    //   digitalWrite(internalLed, HIGH);
-    //   vTaskDelay(pdMS_TO_TICKS(500));
-    // } 
-    vTaskDelay(pdMS_TO_TICKS(100));
+    vTaskDelay(pdMS_TO_TICKS(1000));
   }
 }
 
@@ -316,8 +349,65 @@ void serialTask(void* parameter)
   }
 }
 
+/**
+ * @brief assign value to energyData
+*/
+void initEnergyMeterData()
+{
+  for (size_t i = 0; i < 64; i++)
+  {
+    energyData[i].unit = i;
+    energyData[i].frequency = i*10000;
+    energyData[i].voltage = i*1000;
+    energyData[i].current = i*100;
+    energyData[i].power = i*10;
+    // for (size_t j = 0; j < 8; j++)
+    // {
+    //   int startAddr = i * 8;
+    //   energyData[startAddr+j].unit = j;
+    //   energyData[startAddr+j].frequency = j*10000;
+    //   energyData[startAddr+j].voltage = j*1000;
+    //   energyData[startAddr+j].current = j*100;
+    //   energyData[startAddr+j].power = j*10;
+    // }
+  }
+}
+
+/**
+ * @brief assign value to jsonData
+ *        @note jsonData is struct to use for http request
+*/
+void initJsonData()
+{
+  EnergyMeterData *startPtr;
+  for (size_t i = 0; i < 8; i++)
+  {
+    startPtr = energyData;
+    jsonData[i].counter = i*100;
+    jsonData[i].id = i+100;
+    jsonData[i].deviceName = "device_name_" + String(i);
+    jsonData[i].energyMeterDataSize = 8;
+    jsonData[i].dataPointer = startPtr + (i*8);
+  }
+  
+}
+
+/**
+ * @brief assign value to jsonHeader
+ *        @note jsonHeader is header for http request
+*/
+void initJsonHeader()
+{
+  jsonHeader.deviceSn = "device_sn";
+  jsonHeader.ip = "0.0.0.0";
+  jsonHeader.type = "sdbctrl";
+}
+
 void setup() {
   // put your setup code here, to run once:
+  initEnergyMeterData();
+  initJsonData();
+  initJsonHeader();
   // pinMode(cfPin, INPUT_PULLDOWN);
   // pinMode(cf1Pin, INPUT_PULLDOWN);
   // pinMode(selPin, OUTPUT);
@@ -332,12 +422,12 @@ void setup() {
   SerialPort.setRxTimeout(1);
 
   serialQueueHandle = xQueueCreate(queueSize, sizeof(uint8_t));
-  blinkQueueHandle = xQueueCreate(queueSize, sizeof(uint8_t));
 
   // Create the serial task
   xTaskCreate(serialTask, "SerialTask", stackSize, NULL, 1, &serialTaskHandle);
   xTaskCreate(sendTask, "SendTask", 1024, NULL, 1, &sendTaskHandle);
-
+  // SerialPort.println("Stopping Task");
+  // vTaskSuspendAll();
   // Set up the interrupt handler
   SerialPort.onReceive(serialInterrupt);
 
@@ -374,10 +464,25 @@ void setup() {
     digitalWrite(internalLed, LOW);
   }
 
-  server.on("/get-data", HTTP_GET, [](AsyncWebServerRequest *request)
+  server.on("/get-data-all", HTTP_GET, [](AsyncWebServerRequest *request)
   {
     SerialPort.println("GET Line Data");
     request->send(200, "application/json", createJsonResponse());
+  });
+
+  server.on("/get-data", HTTP_GET, [](AsyncWebServerRequest *request)
+  {
+    SerialPort.println("GET Line Data");
+    String buffer;
+    size_t jsonDataSize = sizeof(jsonData) / sizeof(jsonData[0]);
+    if (jsonHandler.httpBuildData(request, jsonHeader, jsonData, jsonDataSize, buffer) > 0)
+    {
+      request->send(200, "application/json", buffer);
+    }
+    else
+    {
+      request->send(400);
+    }
   });
 
   server.begin();
@@ -432,7 +537,9 @@ void setup() {
   // set_clock_gpio_hf(freqPin_2, 2, 500);
   // delay(100);
   timerAlarmEnable(timer); // enable 1 second timer
-
+  // SerialPort.println("Resuming Task");
+  // xTaskResumeAll();
+  isReady = true;
 }
 
 void loop() {
