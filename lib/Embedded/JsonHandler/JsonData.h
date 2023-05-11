@@ -2,7 +2,7 @@
 #define JSONDATA_H
 
 #include <Arduino.h>
-#include "EnergyMeterData.h"
+#include <EnergyMeterData.h>
 
 struct JsonHeader
 {

@@ -12,9 +12,13 @@
 #include "freertos/task.h"
 #include <HardwareSerial.h>
 #include <JsonHandler.h>
+#include <SerialHandler.h>
 
 HardwareSerial SerialPort(0);
 JsonHandler jsonHandler;
+// SerialHandler serialHandler(&SerialPort);
+SerialHandler serialHandler;
+
 
 // Task handle and stack size
 TaskHandle_t serialTaskHandle;
@@ -74,6 +78,10 @@ EnergyMeter energyMeter[8] = {
 
 JsonData jsonData[8];
 JsonHeader jsonHeader;
+DataPack dataPack;
+RelayStatus relayStatus[8];
+WriteCommand writeCommandStorage[12];
+Vector <WriteCommand> writeCommand;
 
 EnergyMeterData energyData[64]; //divided into a group for every 8
 
@@ -266,31 +274,36 @@ void sendTask(void* parameter)
       uint8_t receivedFlag;
       if (xSemaphoreTake(myLock, portMAX_DELAY) == pdTRUE)
       {
-        // SerialPort.println("This is scheduler");
-        // for (size_t i = 0; i < 64; i++)
-        // {
-        //   SerialPort.println(energyData[i].unit);
-        // }
-        // SerialPort.println("================");
-        SerialPort.println("===========Begin=========");
-        for (size_t i = 0; i < 8; i++)
+        if (writeCommand.size() > 0)
         {
-          EnergyMeterData *ptr;
-          ptr = jsonData[i].dataPointer;
-          SerialPort.println("Display : " + String(i));
-          SerialPort.println("Counter : " + String(jsonData[i].counter));
-          SerialPort.println("ID : " + String(jsonData[i].id));
-          SerialPort.println("Device Name : " + String(jsonData[i].deviceName));
-          for (size_t j = 0; j < jsonData[i].energyMeterDataSize; j++)
-          {
-            SerialPort.println("Unit : " + String((ptr+j)->unit));
-            SerialPort.println("Frequency : " + String((ptr+j)->frequency));
-            SerialPort.println("Voltage : " + String((ptr+j)->voltage));
-            SerialPort.println("Current : " + String((ptr+j)->current));
-            SerialPort.println("Power : " + String((ptr+j)->power));
-          }
+          serialHandler.write(writeCommand.at(0), &SerialPort);
+          writeCommand.remove(0);
         }
-        SerialPort.println("==========End===========");
+        else
+        {
+          SerialPort.println("scheduler");
+        }
+        
+        
+        // SerialPort.println("===========Begin=========");
+        // for (size_t i = 0; i < 8; i++)
+        // {
+        //   EnergyMeterData *ptr;
+        //   ptr = jsonData[i].dataPointer;
+        //   SerialPort.println("Display : " + String(i));
+        //   SerialPort.println("Counter : " + String(jsonData[i].counter));
+        //   SerialPort.println("ID : " + String(jsonData[i].id));
+        //   SerialPort.println("Device Name : " + String(jsonData[i].deviceName));
+        //   for (size_t j = 0; j < jsonData[i].energyMeterDataSize; j++)
+        //   {
+        //     SerialPort.println("Unit : " + String((ptr+j)->unit));
+        //     SerialPort.println("Frequency : " + String((ptr+j)->frequency));
+        //     SerialPort.println("Voltage : " + String((ptr+j)->voltage));
+        //     SerialPort.println("Current : " + String((ptr+j)->current));
+        //     SerialPort.println("Power : " + String((ptr+j)->power));
+        //   }
+        // }
+        // SerialPort.println("==========End===========");
       }
       xSemaphoreGive(myLock);
       // if(xQueueReceive(serialQueueHandle, &receivedFlag, portMAX_DELAY) == pdTRUE)
@@ -302,7 +315,7 @@ void sendTask(void* parameter)
       //   vTaskDelay(pdMS_TO_TICKS(500));
       // } 
     }
-    vTaskDelay(pdMS_TO_TICKS(1000));
+    vTaskDelay(pdMS_TO_TICKS(100));
   }
 }
 
@@ -328,13 +341,19 @@ void serialTask(void* parameter)
           char data = SerialPort.read();
           if(data == '\n')
           {
-            if(dataString == "get-data")
+            if(serialHandler.parse(dataString, dataPack, &SerialPort))
             {
-              SerialPort.println("Data : " + String(number));
-              String s = createJsonResponse();
-              SerialPort.println(s);
-              number++;
+              // SerialPort.println("Data : " + String(number));
+              // String s = createJsonResponse();
+              // SerialPort.println(s);
+              SerialPort.println("======Data Received========");
+              
             }
+            else
+            {
+              SerialPort.println("======Data Error========");
+            }
+            number++;
             dataString = "";
           }
           else
@@ -403,11 +422,19 @@ void initJsonHeader()
   jsonHeader.type = "sdbctrl";
 }
 
+void initDataPack()
+{
+  dataPack.jsonData = jsonData;
+  dataPack.relayStatus = relayStatus;
+}
+
 void setup() {
   // put your setup code here, to run once:
   initEnergyMeterData();
   initJsonData();
   initJsonHeader();
+  initDataPack();
+  writeCommand.setStorage(writeCommandStorage);
   // pinMode(cfPin, INPUT_PULLDOWN);
   // pinMode(cf1Pin, INPUT_PULLDOWN);
   // pinMode(selPin, OUTPUT);
@@ -425,7 +452,7 @@ void setup() {
 
   // Create the serial task
   xTaskCreate(serialTask, "SerialTask", stackSize, NULL, 1, &serialTaskHandle);
-  xTaskCreate(sendTask, "SendTask", 1024, NULL, 1, &sendTaskHandle);
+  xTaskCreate(sendTask, "SendTask", stackSize, NULL, 1, &sendTaskHandle);
   // SerialPort.println("Stopping Task");
   // vTaskSuspendAll();
   // Set up the interrupt handler
@@ -485,6 +512,23 @@ void setup() {
     }
   });
 
+  AsyncCallbackJsonWebHandler *setRelayHttpHandler = new AsyncCallbackJsonWebHandler("/set-relay", [](AsyncWebServerRequest *request, JsonVariant &json)
+    {
+        String input = json.as<String>();
+        String output;
+        WriteCommand w;
+        if (jsonHandler.httpRelayWrite(input.c_str(), w))
+        {
+          writeCommand.push_back(w);
+          request->send(200, "application/json", jsonHandler.httpResponseOk());
+        }
+        else
+        {
+          request->send(400);
+        }
+    });
+
+  server.addHandler(setRelayHttpHandler);
   server.begin();
 
   // initPcnt(cfPin, 0, highLimit, PCNT_UNIT_0, PCNT_CHANNEL_0); // pulse counter for active power

@@ -1,30 +1,33 @@
 #ifndef SERIALHANDLER_H
 #define SERIALHANDLER_H
 
-// #define ENERGYMETER_DEBUG
+// #define SERIALHANDLER_DEBUG
 
-#ifdef SERIALHANDLER_DEBUG
-    #define LOG_PRINT(x)    Serial.print(x)
-    #define LOG_PRINTLN(x)  Serial.println(x)
-#else
-    #define LOG_PRINT(x)
-    #define LOG_PRINTLN(x)
-#endif
+// #ifdef SERIALHANDLER_DEBUG
+//     #define LOG_PRINT(x)    Serial.print(x)
+//     #define LOG_PRINTLN(x)  Serial.println(x)
+// #else
+//     #define LOG_PRINT(x)
+//     #define LOG_PRINTLN(x)
+// #endif
 
 #include <Arduino.h>
 #include <ArduinoJson.h>
 #include <Vector.h>
-#include "JsonData.h"
+#include <JsonData.h>
+#include "SerialData.h"
 
 class SerialHandler {
     public :
+        // SerialHandler(Stream *serial);
         SerialHandler();
-        int parse(String input, JsonData jsonData[]);
-
+        bool parse(String input, DataPack &dataPack, Stream *serial);
+        bool write(const WriteCommand &writeCommand, Stream *serial);
         String buildDataRequest();
 
     private :
-        bool dataResponseParser(String input, JsonData jsonData[]);
+        bool dataReadResponseParser(String input, DataPack &dataPack, Stream *serial);
+        bool lineWriteResponseParser(String input);
 };
 
 

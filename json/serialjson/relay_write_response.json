@@ -1,0 +1,55 @@
+{
+    "id" : 1,
+    "code" : 16,
+    "register" : 2,
+    "data" : [
+        {
+            "line" : 1,
+            "status" : 1
+        },
+        {
+            "line" : 2,
+            "status" : 0
+        },
+        {
+            "line" : 3,
+            "status" : 1
+        },
+        {
+            "line" : 4,
+            "status" : 0
+        },
+        {
+            "line" : 5,
+            "status" : 1
+        },
+        {
+            "line" : 6,
+            "status" : 0
+        },
+        {
+            "line" : 7,
+            "status" : 1
+        },
+        {
+            "line" : 8,
+            "status" : 0
+        },
+        {
+            "line" : 9,
+            "status" : 1
+        },
+        {
+            "line" : 10,
+            "status" : 0
+        },
+        {
+            "line" : 11,
+            "status" : 1
+        },
+        {
+            "line" : 12,
+            "status" : 0
+        }
+    ]
+}

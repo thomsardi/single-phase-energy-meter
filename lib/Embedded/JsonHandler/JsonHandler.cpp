@@ -58,6 +58,48 @@ int JsonHandler::httpBuildData(AsyncWebServerRequest *request, const JsonHeader 
     return 1;
 }
 
+bool JsonHandler::httpRelayWrite(const char* input, WriteCommand &writeCommand)
+{
+    // String input;
+
+    StaticJsonDocument<768> doc;
+
+    DeserializationError error = deserializeJson(doc, input);
+
+    if (error) {
+        Serial.print("deserializeJson() failed: ");
+        Serial.println(error.c_str());
+        return 0;
+    }
+
+    if (!doc.containsKey("id"))
+    {
+        return 0;
+    }
+
+    if (!doc.containsKey("data"))
+    {
+        return 0;
+    }
+
+    writeCommand.id = doc["id"];
+    writeCommand.functionCode = FunctionCode::WRITE_MULTIPLE_HOLDING_REGISTER;
+    writeCommand.registerLocation = RegisterList::RELAY_DATA;
+    writeCommand.writedata = doc["data"].as<String>();
+    return 1;
+}
+
+String JsonHandler::httpResponseOk()
+{
+    String output;
+    StaticJsonDocument<16> doc;
+
+    doc["status"] = 200;
+
+    serializeJson(doc, output);
+    return output;
+}
+
 void JsonHandler::parser(const String &input, char delimiter, Vector<String> &valueVec)
 {
     int index = 0;

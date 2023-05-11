@@ -3,13 +3,13 @@
 
 // #define ENERGYMETER_DEBUG
 
-#ifdef ENERGYMETER_DEBUG
-    #define LOG_PRINT(x)    Serial.print(x)
-    #define LOG_PRINTLN(x)  Serial.println(x)
-#else
-    #define LOG_PRINT(x)
-    #define LOG_PRINTLN(x)
-#endif
+// #ifdef ENERGYMETER_DEBUG
+//     #define LOG_PRINT(x)    Serial.print(x)
+//     #define LOG_PRINTLN(x)  Serial.println(x)
+// #else
+//     #define LOG_PRINT(x)
+//     #define LOG_PRINTLN(x)
+// #endif
 
 #include <Arduino.h>
 #include "EnergyMeterData.h"

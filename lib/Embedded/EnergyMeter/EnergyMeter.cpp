@@ -142,11 +142,11 @@ void EnergyMeter::setMode(uint8_t mode)
     {
         if(_mode == 0)
         {
-            LOG_PRINTLN("Current Mode");
+            // LOG_PRINTLN("Current Mode");
         }
         else
         {
-            LOG_PRINTLN("Voltage Mode");
+            // LOG_PRINTLN("Voltage Mode");
         }
         if (!_isNoSelPin)
         {
@@ -156,7 +156,7 @@ void EnergyMeter::setMode(uint8_t mode)
     else
     {
         _mode = 2;
-        LOG_PRINTLN("Power Mode");
+        // LOG_PRINTLN("Power Mode");
     }
 }
 
