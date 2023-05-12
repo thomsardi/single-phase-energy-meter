@@ -14,8 +14,9 @@
 #include <Arduino.h>
 #include <ArduinoJson.h>
 #include <Vector.h>
-#include <JsonData.h>
 #include "SerialData.h"
+#include <DataDef.h>
+// #include <JsonHandler.h>
 
 class SerialHandler {
     public :
@@ -23,11 +24,13 @@ class SerialHandler {
         SerialHandler();
         bool parse(String input, DataPack &dataPack, Stream *serial);
         bool write(const WriteCommand &writeCommand, Stream *serial);
+        String createCommand(const WriteCommand &writeCommand, JsonObjectConst data);
         String buildDataRequest();
 
     private :
         bool dataReadResponseParser(String input, DataPack &dataPack, Stream *serial);
         bool lineWriteResponseParser(String input);
+        void merge(JsonObject dest, JsonObjectConst src);
 };
 
 

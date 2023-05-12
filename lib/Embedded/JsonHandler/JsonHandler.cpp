@@ -1,8 +1,8 @@
 #include "JsonHandler.h"
 
-JsonHandler::JsonHandler()
+JsonHandler::JsonHandler(Stream *serial)
 {
-
+    _serial = serial;
 }
 
 int JsonHandler::httpBuildData(AsyncWebServerRequest *request, const JsonHeader &jsonHeader, const JsonData jsonData[], size_t jsonDataSize, String &buffer)
@@ -25,7 +25,6 @@ int JsonHandler::httpBuildData(AsyncWebServerRequest *request, const JsonHeader 
     doc["ip"] = jsonHeader.ip;
     doc["type"] = jsonHeader.type;
     JsonArray data = doc.createNestedArray("data");
-
     for (auto &temp : valueVec)
     {
         JsonObject data_0 = data.createNestedObject();
@@ -58,11 +57,62 @@ int JsonHandler::httpBuildData(AsyncWebServerRequest *request, const JsonHeader 
     return 1;
 }
 
-bool JsonHandler::httpRelayWrite(const char* input, WriteCommand &writeCommand)
+bool JsonHandler::httpBuildRelayStatus(AsyncWebServerRequest *request, const JsonHeader &jsonHeader, const JsonData jsonData[], size_t jsonDataSize, String &buffer)
+{
+    if (!request->hasParam("id"))
+    {
+        return 0;
+    }
+
+    DynamicJsonDocument doc(8192);
+    String value[12];
+    Vector <String> valueVec;
+    valueVec.setStorage(value);
+    RelayStatus *dataPointer;
+
+    String input = request->getParam("id")->value();
+    parser(input, ',', valueVec);
+    
+    doc["device_sn"] = jsonHeader.deviceSn;
+    doc["ip"] = jsonHeader.ip;
+    doc["type"] = jsonHeader.type;
+    JsonArray data = doc.createNestedArray("data");
+
+    for (auto &temp : valueVec)
+    {
+        JsonObject data_0 = data.createNestedObject();
+        if (isNumber(temp))
+        {
+            int id = temp.toInt();
+            for (int i = 0; i < jsonDataSize; i++)
+            {
+                if (id == jsonData[i].id)
+                {
+                    data_0["counter"] = jsonData[i].counter;
+                    data_0["id"] = jsonData[i].id;
+                    data_0["device_name"] = jsonData[i].deviceName;
+                    dataPointer = jsonData[i].relayStatusPointer;
+                    JsonArray data_0_device_data = data_0.createNestedArray("device_data");
+                    for (int j = 0; j < jsonData[i].relayStatusDataSize; j++)
+                    {
+                        JsonObject data_0_device_data_0 = data_0_device_data.createNestedObject();
+                        data_0_device_data_0["line"] = j;
+                        int16_t state = ((dataPointer->line_status.val) >> j) & 1;
+                        data_0_device_data_0["state"] = state;
+                    } 
+                }
+            }
+        }        
+    }
+    serializeJson(doc, buffer);
+    return 1;
+}
+
+bool JsonHandler::httpRelayWrite(const char* input, String &output)
 {
     // String input;
 
-    StaticJsonDocument<768> doc;
+    StaticJsonDocument<768> doc, doc2;
 
     DeserializationError error = deserializeJson(doc, input);
 
@@ -81,11 +131,25 @@ bool JsonHandler::httpRelayWrite(const char* input, WriteCommand &writeCommand)
     {
         return 0;
     }
+    WriteCommand w;
+    w.id = doc["id"];
+    w.functionCode = FunctionCode::WRITE_MULTIPLE_HOLDING_REGISTER;
+    w.registerLocation = RegisterList::RELAY_DATA;
+    JsonArray data = doc2.createNestedArray("data");
+    for (JsonObject data_item : doc["data"].as<JsonArray>()) {
 
-    writeCommand.id = doc["id"];
-    writeCommand.functionCode = FunctionCode::WRITE_MULTIPLE_HOLDING_REGISTER;
-    writeCommand.registerLocation = RegisterList::RELAY_DATA;
-    writeCommand.writedata = doc["data"].as<String>();
+        JsonObject data_0 = data.createNestedObject();
+        if (data_item.containsKey("line") && data_item.containsKey("state"))
+        {
+            data_0["line"] = data_item["line"]; // 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12
+            data_0["state"] = data_item["state"]; // 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0
+        }        
+    }
+    SerialHandler s;
+    // serializeJson(doc2, output);
+    // _serial->println(output);
+    output = s.createCommand(w, doc2.as<JsonObject>());
+    // _serial->println(output);
     return 1;
 }
 

@@ -11,11 +11,13 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include <HardwareSerial.h>
-#include <JsonHandler.h>
 #include <SerialHandler.h>
+#include <JsonHandler.h>
+#include <DataDef.h>
+
 
 HardwareSerial SerialPort(0);
-JsonHandler jsonHandler;
+JsonHandler jsonHandler(&SerialPort);
 // SerialHandler serialHandler(&SerialPort);
 SerialHandler serialHandler;
 
@@ -30,7 +32,7 @@ const uint32_t queueSize = 10;
 
 bool isReady;
 unsigned int number = 0;
-float coef_u = 0.125; // coefficient for voltage measurement, to get this value use the following formula coef u = voltage on voltmeter / reading frequency
+float coef_v = 0.125; // coefficient for voltage measurement, to get this value use the following formula coef u = voltage on voltmeter / reading frequency
 float coef_i = 0.013;
 float coef_p = 2.54;
 int ledcPin[8] = {4, 13, 14, 15, 16, 17, 18, 19};
@@ -66,7 +68,7 @@ int reconnectInterval = 5000;
 AsyncWebServer server(80);
 
 EnergyMeter energyMeter[8] = {
-  EnergyMeter(pcntPin[0], 5, 0, 0),
+  EnergyMeter(pcntPin[0], ledcPin[2], 0, 0),
   EnergyMeter(pcntPin[1], 5, 1, 0),
   EnergyMeter(pcntPin[2], 5, 2, 0),
   EnergyMeter(pcntPin[3], 5, 3, 0),
@@ -80,8 +82,8 @@ JsonData jsonData[8];
 JsonHeader jsonHeader;
 DataPack dataPack;
 RelayStatus relayStatus[8];
-WriteCommand writeCommandStorage[12];
-Vector <WriteCommand> writeCommand;
+String writeCommandStorage[12];
+Vector <String> writeCommand(writeCommandStorage);
 
 EnergyMeterData energyData[64]; //divided into a group for every 8
 
@@ -116,7 +118,7 @@ static void IRAM_ATTR pcnt_intr_handler(void *arg)
 void IRAM_ATTR onTimer()
 {
   mode++;
-  if(mode > 2)
+  if(mode >= 2)
   {
     mode = 0;
   }
@@ -276,12 +278,14 @@ void sendTask(void* parameter)
       {
         if (writeCommand.size() > 0)
         {
-          serialHandler.write(writeCommand.at(0), &SerialPort);
+          SerialPort.println("Command buffer before send : " + String(writeCommand.size()));
+          SerialPort.println(writeCommand.at(0));
           writeCommand.remove(0);
+          SerialPort.println("Command buffer after send : " + String(writeCommand.size()));
         }
         else
         {
-          SerialPort.println("scheduler");
+          // SerialPort.println("scheduler");
         }
         
         
@@ -315,7 +319,7 @@ void sendTask(void* parameter)
       //   vTaskDelay(pdMS_TO_TICKS(500));
       // } 
     }
-    vTaskDelay(pdMS_TO_TICKS(100));
+    vTaskDelay(pdMS_TO_TICKS(1000));
   }
 }
 
@@ -392,6 +396,15 @@ void initEnergyMeterData()
   }
 }
 
+void initRelayStatus()
+{
+  for (size_t i = 0; i < 8; i++)
+  {
+    relayStatus[i].line_status.val = 1 << i;
+  }
+  
+}
+
 /**
  * @brief assign value to jsonData
  *        @note jsonData is struct to use for http request
@@ -399,14 +412,19 @@ void initEnergyMeterData()
 void initJsonData()
 {
   EnergyMeterData *startPtr;
+  RelayStatus *startRelayStatusPtr;
+  startPtr = energyData;
+  startRelayStatusPtr = relayStatus;
   for (size_t i = 0; i < 8; i++)
   {
     startPtr = energyData;
-    jsonData[i].counter = i*100;
-    jsonData[i].id = i+100;
+    jsonData[i].counter = 0;
+    jsonData[i].id = i;
     jsonData[i].deviceName = "device_name_" + String(i);
     jsonData[i].energyMeterDataSize = 8;
     jsonData[i].dataPointer = startPtr + (i*8);
+    jsonData[i].relayStatusPointer = startRelayStatusPtr + i;
+    jsonData[i].relayStatusDataSize = 12;
   }
   
 }
@@ -434,7 +452,7 @@ void setup() {
   initJsonData();
   initJsonHeader();
   initDataPack();
-  writeCommand.setStorage(writeCommandStorage);
+  initRelayStatus();
   // pinMode(cfPin, INPUT_PULLDOWN);
   // pinMode(cf1Pin, INPUT_PULLDOWN);
   // pinMode(selPin, OUTPUT);
@@ -513,20 +531,38 @@ void setup() {
   });
 
   AsyncCallbackJsonWebHandler *setRelayHttpHandler = new AsyncCallbackJsonWebHandler("/set-relay", [](AsyncWebServerRequest *request, JsonVariant &json)
+  {
+      String input = json.as<String>();
+      String output;
+      if (jsonHandler.httpRelayWrite(input.c_str(), output))
+      {
+        if(writeCommand.size() == writeCommand.max_size())
+        {
+          writeCommand.remove(0);
+        }
+        writeCommand.push_back(output);
+        request->send(200, "application/json", jsonHandler.httpResponseOk());
+      }
+      else
+      {
+        request->send(400);
+      }
+  });
+
+  server.on("/get-relay-status", HTTP_GET, [](AsyncWebServerRequest *request)
+  {
+    SerialPort.println("GET Relay Status");
+    String buffer;
+    size_t jsonDataSize = sizeof(jsonData) / sizeof(jsonData[0]);
+    if (jsonHandler.httpBuildRelayStatus(request, jsonHeader, jsonData, jsonDataSize, buffer) > 0)
     {
-        String input = json.as<String>();
-        String output;
-        WriteCommand w;
-        if (jsonHandler.httpRelayWrite(input.c_str(), w))
-        {
-          writeCommand.push_back(w);
-          request->send(200, "application/json", jsonHandler.httpResponseOk());
-        }
-        else
-        {
-          request->send(400);
-        }
-    });
+      request->send(200, "application/json", buffer);
+    }
+    else
+    {
+      request->send(400);
+    }
+  });
 
   server.addHandler(setRelayHttpHandler);
   server.begin();
@@ -551,7 +587,7 @@ void setup() {
   {
     energyMeter[i].registerHandler(pcnt_intr_handler);
     energyMeter[i].setMode(0);
-    energyMeter[i].setCalibrator(0.001, 0.002, 0.003);
+    energyMeter[i].setCalibrator(coef_v, coef_i, coef_p);
     // if (i%2)
     // {
     //   energyMeter[i].setMode(3);
@@ -569,12 +605,14 @@ void setup() {
   */
   set_clock_gpio_hf(ledcPin[0], 0, 100000);
   set_clock_gpio_hf(ledcPin[1], 2, 200000);
-  set_clock_gpio_hf(ledcPin[2], 4, 300000);
+  // set_clock_gpio_hf(ledcPin[2], 4, 300000);
   set_clock_gpio_hf(ledcPin[3], 6, 400000);
   set_clock_gpio_hf(ledcPin[4], 8, 500000);
   set_clock_gpio_hf(ledcPin[5], 10, 600000);
   set_clock_gpio_hf(ledcPin[6], 12, 700000);
   set_clock_gpio_hf(ledcPin[7], 14, 800000);
+
+  // pinMode(ledcPin[7], OUTPUT);
 
   // set_clock_gpio_hf(freqPin_1, 0, 1000);
   // delay(100);
@@ -616,34 +654,37 @@ void loop() {
 
   // if(isTriggered)
   // {
+  //   if (mode >= 2)
+  //   {
+  //     mode = 0;
+  //   }
   //   SerialPort.println("==========Frequency Measurement===========");
   //   SerialPort.println("Measurement : " + String(number));
     
   //   for (size_t i = 0; i < 8; i++)
   //   {
   //     EnergyMeterData data = energyMeter[i].getEnergyMeterData();
-  //     int energyMeterMode = energyMeter[i].getMode();
-  //     switch (energyMeterMode)
-  //     {
-  //       case 0:
-  //           SerialPort.println("Current Mode");
-  //         break;
-  //       case 1:
-  //           SerialPort.println("Voltage Mode");
-  //         break;
-  //       default:
-  //           SerialPort.println("Power Mode");
-  //     }
+  //     // int energyMeterMode = energyMeter[i].getMode();
+  //     // switch (energyMeterMode)
+  //     // {
+  //     //   case 0:
+  //     //       SerialPort.println("Current Mode");
+  //     //     break;
+  //     //   case 1:
+  //     //       SerialPort.println("Voltage Mode");
+  //     //     break;
+  //     //   default:
+  //     //       SerialPort.println("Power Mode");
+  //     // }
   //     SerialPort.println("Frequency " + String(data.unit) + " : " + String(data.frequency) + " Hz");
   //     SerialPort.println("Voltage " + String(data.unit) + " : " + String(data.voltage) + " mV");
   //     SerialPort.println("Current " + String(data.unit) + " : " + String(data.current) + " mA");
   //     SerialPort.println("Power " + String(data.unit) + " : " + String(data.power) + " mW");
+  //     energyMeter[i].setMode(mode);
   //   }
 
   //   SerialPort.println("==================End=====================");
   //   isTriggered = false;
   //   number++;
   // }
-    
-
 }

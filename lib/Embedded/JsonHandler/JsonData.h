@@ -3,6 +3,7 @@
 
 #include <Arduino.h>
 #include <EnergyMeterData.h>
+#include <DataDef.h>
 
 struct JsonHeader
 {
@@ -10,15 +11,6 @@ struct JsonHeader
     String ip;
     String type;
 
-};
-
-struct JsonData
-{
-    uint counter;
-    uint8_t id;
-    String deviceName;
-    EnergyMeterData *dataPointer;
-    size_t energyMeterDataSize;
 };
 
 #endif

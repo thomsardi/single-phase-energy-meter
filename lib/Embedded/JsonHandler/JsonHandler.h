@@ -12,21 +12,25 @@
 #endif
 
 #include <Arduino.h>
-#include <ESPAsyncWebServer.h>
 #include "JsonData.h"
+#include <SerialHandler.h>
 #include <SerialData.h>
 #include <ArduinoJson.h>
 #include <Vector.h>
+#include <ESPAsyncWebServer.h>
 
 class JsonHandler {
     public :
-        JsonHandler();
+        JsonHandler(Stream *serial);
         int httpBuildData(AsyncWebServerRequest *request, const JsonHeader &jsonHeader, const JsonData jsonData[], size_t jsonDataSize, String &buffer);
-        bool httpRelayWrite(const char* input, WriteCommand &writeCommand);
+        bool httpBuildRelayStatus(AsyncWebServerRequest *request, const JsonHeader &jsonHeader, const JsonData jsonData[], size_t jsonDataSize, String &buffer);
+        bool httpRelayWrite(const char* input, String &output);
         String httpResponseOk();
+        static void merge(JsonObject dest, JsonObjectConst src);
     private :
         void parser(const String &input, char delimiter, Vector<String> &valueVec);
         bool isNumber(const String &input);
+        Stream *_serial;
 };
 
 

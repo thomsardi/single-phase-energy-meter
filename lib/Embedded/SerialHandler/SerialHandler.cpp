@@ -22,14 +22,34 @@ bool SerialHandler::parse(String input, DataPack &dataPack, Stream *serial)
 bool SerialHandler::write(const WriteCommand &writeCommand, Stream *serial)
 {
     StaticJsonDocument<768> doc;
-    doc["id"] = writeCommand.id;
-    doc["code"] = writeCommand.functionCode;
-    doc["register"] = writeCommand.registerLocation;
+    
     doc["data"] = writeCommand.writedata;
     String output;
     serializeJson(doc, output);
+    serial->println(writeCommand.writedata);
     serial->println(output);
     return 1;
+}
+
+String SerialHandler::createCommand(const WriteCommand &writeCommand, JsonObjectConst data)
+{
+    StaticJsonDocument<1024> doc, doc2;
+    String output;
+    doc["id"] = writeCommand.id;
+    doc["code"] = writeCommand.functionCode;
+    doc["register"] = writeCommand.registerLocation;
+    // doc2["test"] = 1000;
+    merge(doc.as<JsonObject>(), data);
+    serializeJson(doc, output);
+    return output;
+}
+
+void SerialHandler::merge(JsonObject dest, JsonObjectConst src)
+{
+    for (auto kvp : src) 
+    {
+        dest[kvp.key()] = kvp.value();
+    }
 }
 
 bool SerialHandler::dataReadResponseParser(String input, DataPack &dataPack, Stream *serial)
