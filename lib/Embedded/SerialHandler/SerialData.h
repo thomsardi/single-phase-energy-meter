@@ -24,18 +24,6 @@ enum RegisterList
     SLAVE_DEVICE_SN = 4
 };
 
-struct RelayData {
-    int line;
-    int state;
-};
-
-struct WriteData {
-    size_t dataSize;
-    union {
-        RelayData *relayData;
-    } data;
-};
-
 struct WriteCommand {
     uint id;
     uint functionCode;

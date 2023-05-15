@@ -37,13 +37,57 @@ struct JsonData
     RelayStatus *relayStatusPointer;
     size_t energyMeterDataSize;
     size_t relayStatusDataSize;
+    size_t dtsu666DataSize;
+};
+
+struct DTSU666_Data{
+    uint counter;
+    uint8_t id;
+    String deviceName;
+    float Uab, Ubc, Uca;
+    float Ua, Ub, Uc;
+    float Ia, Ib, Ic;
+    float Pt;
+    float Pa, Pb, Pc;
+    float Pft;
+    float Pfa, Pfb, Pfc;
+    float Freq;
+    float ImpEp;
+    float ExpEp;
 };
 
 struct DataPack {
     JsonData *jsonData;
     RelayStatus *relayStatus;
+    DTSU666_Data *dtsu666Data;
 };
 
+/**
+ * @brief used for relay control
+*/
+enum CommandType{
+    RELAY = 1,
+};
+
+struct LineData
+{
+    int voltage;
+    int current;
+    int power;
+};
+
+struct RelayData
+{
+    int number;
+    int lineList[36];
+    int valueList[36];
+};
+
+struct Command 
+{
+    int type;
+    RelayData relayData;
+};
 
 
 #endif

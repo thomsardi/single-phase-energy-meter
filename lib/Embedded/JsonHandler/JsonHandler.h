@@ -23,6 +23,7 @@ class JsonHandler {
     public :
         JsonHandler(Stream *serial);
         int httpBuildData(AsyncWebServerRequest *request, const JsonHeader &jsonHeader, const JsonData jsonData[], size_t jsonDataSize, String &buffer);
+        bool httpDtsu666Data(AsyncWebServerRequest *request, const JsonHeader &jsonHeader, const DTSU666_Data dtsu666Data[], size_t dtsu666DataSize, String &buffer);
         bool httpBuildRelayStatus(AsyncWebServerRequest *request, const JsonHeader &jsonHeader, const JsonData jsonData[], size_t jsonDataSize, String &buffer);
         bool httpRelayWrite(const char* input, String &output);
         String httpResponseOk();

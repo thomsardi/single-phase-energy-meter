@@ -57,6 +57,68 @@ int JsonHandler::httpBuildData(AsyncWebServerRequest *request, const JsonHeader 
     return 1;
 }
 
+bool JsonHandler::httpDtsu666Data(AsyncWebServerRequest *request, const JsonHeader &jsonHeader, const DTSU666_Data dtsu666Data[], size_t dtsuDataSize, String &buffer)
+{
+    if (!request->hasParam("id"))
+    {
+        return 0;
+    }
+
+    DynamicJsonDocument doc(8192);
+    String value[12];
+    Vector <String> valueVec;
+    valueVec.setStorage(value);
+    DTSU666_Data *dataPointer;
+
+    String input = request->getParam("id")->value();
+    parser(input, ',', valueVec);
+    
+    doc["device_sn"] = jsonHeader.deviceSn;
+    doc["ip"] = jsonHeader.ip;
+    doc["type"] = jsonHeader.type;
+    JsonArray data = doc.createNestedArray("data");
+    for (auto &temp : valueVec)
+    {
+        JsonObject data_0 = data.createNestedObject();
+        if (isNumber(temp))
+        {
+            int id = temp.toInt();
+            for (int i = 0; i < dtsuDataSize; i++)
+            {
+                if (id == dtsu666Data[i].id)
+                {
+                    data_0["counter"] = dtsu666Data[i].counter;
+                    data_0["id"] = dtsu666Data[i].id;
+                    data_0["device_name"] = dtsu666Data[i].deviceName;
+                    JsonObject data_0_device_data_0 = data_0["device_data"].createNestedObject();
+                    data_0_device_data_0["line_voltage_a_b"] = dtsu666Data[i].Uab;
+                    data_0_device_data_0["line_voltage_b_c"] = dtsu666Data[i].Ubc;
+                    data_0_device_data_0["line_voltage_c_a"] = dtsu666Data[i].Uca;
+                    data_0_device_data_0["phase_voltage_a"] = dtsu666Data[i].Ua;
+                    data_0_device_data_0["phase_voltage_b"] = dtsu666Data[i].Ub;
+                    data_0_device_data_0["phase_voltage_c"] = dtsu666Data[i].Uc;
+                    data_0_device_data_0["phase_current_a"] = dtsu666Data[i].Ia;
+                    data_0_device_data_0["phase_current_b"] = dtsu666Data[i].Ib;
+                    data_0_device_data_0["phase_current_c"] = dtsu666Data[i].Ic;
+                    data_0_device_data_0["active_power"] = dtsu666Data[i].Pt;
+                    data_0_device_data_0["active_power_a"] = dtsu666Data[i].Pa;
+                    data_0_device_data_0["active_power_b"] = dtsu666Data[i].Pb;
+                    data_0_device_data_0["active_power_c"] = dtsu666Data[i].Pc;
+                    data_0_device_data_0["power_factor"] = dtsu666Data[i].Pft;
+                    data_0_device_data_0["power_factor_a"] = dtsu666Data[i].Pfa;
+                    data_0_device_data_0["power_factor_b"] = dtsu666Data[i].Pfb;
+                    data_0_device_data_0["power_factor_c"] = dtsu666Data[i].Pfc;
+                    data_0_device_data_0["frequency"] = dtsu666Data[i].Freq;
+                    data_0_device_data_0["import_energy"] = dtsu666Data[i].ImpEp;
+                    data_0_device_data_0["export_energy"] = dtsu666Data[i].ExpEp;
+                }
+            }
+        }        
+    }
+    serializeJson(doc, buffer);
+    return 1;
+}
+
 bool JsonHandler::httpBuildRelayStatus(AsyncWebServerRequest *request, const JsonHeader &jsonHeader, const JsonData jsonData[], size_t jsonDataSize, String &buffer)
 {
     if (!request->hasParam("id"))
