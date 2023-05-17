@@ -682,7 +682,7 @@ void setup() {
   MB.setTimeout(100);
   RTUutils::prepareHardwareSerial(Serial2);
   Serial2.setRxBufferSize(1024);
-  Serial2.begin(115200);
+  Serial2.begin(9600);
   MB.begin(Serial2, 1);
 
   
