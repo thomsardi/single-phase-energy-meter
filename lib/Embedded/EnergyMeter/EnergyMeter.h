@@ -62,7 +62,7 @@ class EnergyMeter {
             PCNT_CHANNEL_0,
             PCNT_CHANNEL_1
         };
-        EnergyMeterData _energyMeterData;
+        EnergyMeterFrequency _energyMeterFrequency;
 };
 
 

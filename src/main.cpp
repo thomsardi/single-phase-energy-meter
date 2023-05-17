@@ -19,6 +19,9 @@
 #include <RelayControl.h>
 #include <WebServerHandler.h>
 #include <ShiftRegister74HC595.h>
+#include <ModbusClientRTU.h>
+
+#define READ_INTERVAL 20
 
 HardwareSerial SerialPort(0);
 JsonHandler jsonHandler(&SerialPort);
@@ -27,6 +30,9 @@ SerialHandler serialHandler;
 ModbusMaster node;
 ModbusMaster node1;
 ModbusMaster node2;
+ModbusClientRTU MB;
+uint32_t request_time;
+bool data_ready = false;
 
 const int numberOfShiftRegister = 8;
 const int numberOfLed = 24;
@@ -48,6 +54,7 @@ LedControl ledControl;
 // Task handle and stack size
 TaskHandle_t serialTaskHandle;
 TaskHandle_t sendTaskHandle;
+TaskHandle_t modbusTaskHandle;
 const uint32_t stackSize = 4096;
 
 QueueHandle_t serialQueueHandle;
@@ -142,6 +149,7 @@ static void IRAM_ATTR pcnt_intr_handler(void *arg)
 */
 void IRAM_ATTR onTimer()
 {
+  
   mode++;
   if(mode >= 2)
   {
@@ -161,6 +169,7 @@ void IRAM_ATTR onTimer()
   }
   
   isTriggered = true;
+
 }
 
 
@@ -280,6 +289,57 @@ String createJsonResponse() {
   return output;
 }
 
+void fillData(DTSU666_Data dtsuData[], ModbusMessage response, TypeToken typeToken)
+{
+  uint8_t serverId = response.getServerID();
+  uint8_t index = serverId -1;
+  uint8_t data[4];
+  uint8_t offset = 3;
+  uint16_t dat;
+  int32_t low;
+  int32_t high;
+  switch (typeToken)
+  {
+  case TypeToken::REQUEST_DATA:
+    dtsuData[index].id = serverId;
+    offset = response.get(offset, dtsuData[index].Uab);
+    offset = response.get(offset, dtsuData[index].Ubc);
+    offset = response.get(offset, dtsuData[index].Uca);
+    offset = response.get(offset, dtsuData[index].Ua);
+    offset = response.get(offset, dtsuData[index].Ub);
+    offset = response.get(offset, dtsuData[index].Uc);
+    offset = response.get(offset, dtsuData[index].Ia);
+    offset = response.get(offset, dtsuData[index].Ib);
+    offset = response.get(offset, dtsuData[index].Ic);
+    offset = response.get(offset, dtsuData[index].Pt);
+    offset = response.get(offset, dtsuData[index].Pa);
+    offset = response.get(offset, dtsuData[index].Pb);
+    offset = response.get(offset, dtsuData[index].Pc);
+    break;
+  case TypeToken::REQUEST_PF:
+    dtsuData[index].id = serverId;
+    offset = response.get(offset, dtsuData[index].Pft);
+    offset = response.get(offset, dtsuData[index].Pfa);
+    offset = response.get(offset, dtsuData[index].Pfb);
+    offset = response.get(offset, dtsuData[index].Pfc);
+    break;
+  case TypeToken::REQUEST_FREQ:
+    dtsuData[index].id = serverId;
+    offset = response.get(offset, dtsuData[index].Freq);
+    break;
+  case TypeToken::REQUEST_IMPORT:
+    dtsuData[index].id = serverId;
+    offset = response.get(offset, dtsuData[index].ImpEp);
+    break;
+  case TypeToken::REQUEST_EXPORT:
+    dtsuData[index].id = serverId;
+    offset = response.get(offset, dtsuData[index].ExpEp);
+    break;
+  default:
+    break;
+  }
+}
+
 // SerialPort interrupt handler function
 void IRAM_ATTR serialInterrupt() {
   BaseType_t xHigherPriorityTaskWoken = pdFALSE;
@@ -290,6 +350,25 @@ void IRAM_ATTR serialInterrupt() {
   xQueueSendFromISR(serialQueueHandle, &receivedChar, &xHigherPriorityTaskWoken);
   xQueueSendFromISR(serialQueueHandle, &receivedChar, &xHigherPriorityTaskWoken);
   portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+}
+
+void handleData(ModbusMessage response, uint32_t token)
+{
+  // SerialPort.printf("Response: serverID=%d, FC=%d, Token=%08X, length=%d:\n", response.getServerID(), response.getFunctionCode(), token, response.size());
+  // for (auto& byte : response) {
+  //   SerialPort.printf("%02X ", byte);
+  // }
+  TypeToken t = static_cast<TypeToken>(token);
+  fillData(dtsu666Data, response, t);
+  // SerialPort.println("");
+}
+
+void handleError(Error error, uint32_t token) 
+{
+  // ModbusError wraps the error code and provides a readable error message for it
+  // ModbusError me(error);
+  // SerialPort.println("Modbus Error");
+  // Serial.printf("Error response: %02X - %s\n", (int)me, (const char *)me);
 }
 
 void sendTask(void* parameter)
@@ -397,6 +476,100 @@ void serialTask(void* parameter)
   }
 }
 
+void test1()
+{
+  static unsigned long next_request = millis();
+  // Error err = MB.addRequest(TypeToken::REQUEST_DATA, 1, READ_HOLD_REGISTER, 0x2000, 26);
+  // Shall we do another request?
+  if (millis() - next_request > READ_INTERVAL) 
+  {
+    // Yes.
+    data_ready = false;
+    // Issue the request
+    Error err = MB.addRequest(TypeToken::REQUEST_DATA, 1, READ_HOLD_REGISTER, 0x2000, 26);
+    if (err!=SUCCESS) {
+      ModbusError e(err);
+      // LOG_E("Error creating request: %02X - %s\n", (int)e, (const char *)e);
+    }
+    // Save current time to check for next cycle
+    next_request = millis();
+  } else {
+    // // No, but we may have another response
+    // if (data_ready) {
+    //   // We do. Print out the data
+    //   Serial.printf("Requested at %8.3fs:\n", request_time / 1000.0);
+    //   for (uint8_t i = 0; i < NUM_VALUES; ++i) {
+    //     Serial.printf("   %04X: %8.3f\n", i * 2 + FIRST_REGISTER, values[i]);
+    //   }
+    //   Serial.printf("----------\n\n");
+    //   data_ready = false;
+    // }
+  }
+}
+
+void modbusTask(void* parameter)
+{
+  int token = 1200;
+  int slaveId = 1;
+  while (1)
+  {
+    if(isReady)
+    {
+      if (token > 1204)
+      {
+        token = 1200;
+        slaveId++;
+      }
+      if(slaveId > 8)
+      {
+        slaveId = 1;
+      }
+      TypeToken t = static_cast<TypeToken>(token);
+      int registerAddress;
+      int numberRegister;
+      switch (t)
+      {
+      case TypeToken::REQUEST_DATA :
+        registerAddress = 0x2000;
+        numberRegister = 26;
+        break;
+      case TypeToken::REQUEST_PF :
+        registerAddress = 0x202A;
+        numberRegister = 8;
+        break;
+      case TypeToken::REQUEST_FREQ :
+        registerAddress = 0x2044;
+        numberRegister = 2;
+        break;
+      case TypeToken::REQUEST_IMPORT :
+        registerAddress = 0x101E;
+        numberRegister = 2 ;
+        break;
+      case TypeToken::REQUEST_EXPORT :
+        registerAddress = 0x1028;
+        numberRegister = 2;
+        break;
+      default:
+        registerAddress = 0x2000;
+        numberRegister = 26;
+        break;
+      }
+      Error err = MB.addRequest(t, slaveId, READ_HOLD_REGISTER, registerAddress, numberRegister);
+      if (err!=SUCCESS) {
+        ModbusError e(err);
+        // SerialPort.println((const char*) e);
+        // LOG_E("Error creating request: %02X - %s\n", (int)e, (const char *)e);
+      }
+      else
+      {
+        token++;
+      }
+    }
+    vTaskDelay(pdMS_TO_TICKS(200));
+  }
+  
+}
+
 /**
  * @brief assign value to energyData
 */
@@ -475,10 +648,10 @@ void initDtsu666Data()
 {
   for (size_t i = 0; i < 8; i++)
   {
-    dtsu666Data[i].id = i;
-    dtsu666Data[i].deviceName = "dtsu666_" + String(i);
-    dtsu666Data[i].ImpEp = i*100000;
-    dtsu666Data[i].ExpEp = i*500000;
+    dtsu666Data[i].id = i+1;
+    dtsu666Data[i].deviceName = "dtsu666_" + String(i+1);
+    // dtsu666Data[i].ImpEp = i*100000;
+    // dtsu666Data[i].ExpEp = i*500000;
   }
   
 }
@@ -499,19 +672,27 @@ void setup() {
   timer = timerBegin(0, 80, true);
   timerAttachInterrupt(timer, &onTimer, true);
   timerAlarmWrite(timer, 1000000, true);
-
+  
   SerialPort.setRxBufferSize(2048);
   SerialPort.begin(115200);
   SerialPort.setRxTimeout(1);
-  Serial2.begin(9600);
-  node.begin(1, SerialPort);
-  node1.begin(2, SerialPort);
-  node2.begin(3, SerialPort);
+
+  MB.onDataHandler(&handleData);
+  MB.onErrorHandler(&handleError);
+  MB.setTimeout(100);
+  RTUutils::prepareHardwareSerial(Serial2);
+  Serial2.setRxBufferSize(1024);
+  Serial2.begin(115200);
+  MB.begin(Serial2, 1);
+
+  
+  // node.begin(1, SerialPort);
   serialQueueHandle = xQueueCreate(queueSize, sizeof(uint8_t));
 
   // Create the serial task
-  xTaskCreate(serialTask, "SerialTask", stackSize, NULL, 1, &serialTaskHandle);
-  xTaskCreate(sendTask, "SendTask", stackSize, NULL, 1, &sendTaskHandle);
+  // xTaskCreate(serialTask, "SerialTask", stackSize, NULL, 1, &serialTaskHandle);
+  // xTaskCreate(sendTask, "SendTask", stackSize, NULL, 1, &sendTaskHandle);
+  xTaskCreate(modbusTask, "modbusTask", stackSize, NULL, 1, &modbusTaskHandle);
   // SerialPort.println("Stopping Task");
   // vTaskSuspendAll();
   // Set up the interrupt handler
@@ -703,9 +884,9 @@ void setup() {
 void loop() {
   // SerialPort.println("TEST");
   if ((WiFi.status() != WL_CONNECTED) && (millis() - lastReconnectMillis >= reconnectInterval)) {
-    // SerialPort.println("WiFi Disconnected");    
+    SerialPort.println("WiFi Disconnected");    
     digitalWrite(internalLed, LOW);
-    // SerialPort.println("Reconnecting to WiFi...");
+    SerialPort.println("Reconnecting to WiFi...");
     WiFi.disconnect();
     WiFi.reconnect();
     lastReconnectMillis = millis();
@@ -746,232 +927,14 @@ void loop() {
     // Serial.println("Line : " + String(c.line));
     // Serial.println("Value : " + String(c.value));    
     commandList.remove(0);
-    // digitalWrite(internalLed, c.value);
   }
-
-
-  uint8_t result;
-  uint16_t data[2];
-   
-  result = node.readHoldingRegisters(0x2000, 26);
-  if (result == node.ku8MBSuccess)
-  {
-    data[0] = node.getResponseBuffer(0);
-    data[1] = node.getResponseBuffer(1);
-    dtsu666Data[0].Uab = static_cast<float>((data[1] << 16) | data[0]);
-    data[0] = node.getResponseBuffer(2);
-    data[1] = node.getResponseBuffer(3);
-    dtsu666Data[0].Ubc = static_cast<float>((data[1] << 16) | data[0]);
-    data[0] = node.getResponseBuffer(4);
-    data[1] = node.getResponseBuffer(5);
-    dtsu666Data[0].Uca = static_cast<float>((data[1] << 16) | data[0]);
-    data[0] = node.getResponseBuffer(6);
-    data[1] = node.getResponseBuffer(7);
-    dtsu666Data[0].Ua = static_cast<float>((data[1] << 16) | data[0]);
-    data[0] = node.getResponseBuffer(8);
-    data[1] = node.getResponseBuffer(9);
-    dtsu666Data[0].Ub = static_cast<float>((data[1] << 16) | data[0]);
-    data[0] = node.getResponseBuffer(10);
-    data[1] = node.getResponseBuffer(11);
-    dtsu666Data[0].Uc = static_cast<float>((data[1] << 16) | data[0]);
-    data[0] = node.getResponseBuffer(12);
-    data[1] = node.getResponseBuffer(13);
-    dtsu666Data[0].Ia = static_cast<float>((data[1] << 16) | data[0]);
-    data[0] = node.getResponseBuffer(14);
-    data[1] = node.getResponseBuffer(15);
-    dtsu666Data[0].Ib = static_cast<float>((data[1] << 16) | data[0]);
-    data[0] = node.getResponseBuffer(16);
-    data[1] = node.getResponseBuffer(17);
-    dtsu666Data[0].Ic = static_cast<float>((data[1] << 16) | data[0]);
-    data[0] = node.getResponseBuffer(18);
-    data[1] = node.getResponseBuffer(19);
-    dtsu666Data[0].Pt = static_cast<float>((data[1] << 16) | data[0]);
-    data[0] = node.getResponseBuffer(20);
-    data[1] = node.getResponseBuffer(21);
-    dtsu666Data[0].Pa = static_cast<float>((data[1] << 16) | data[0]);
-    data[0] = node.getResponseBuffer(22);
-    data[1] = node.getResponseBuffer(23);
-    dtsu666Data[0].Pb = static_cast<float>((data[1] << 16) | data[0]);
-    data[0] = node.getResponseBuffer(24);
-    data[1] = node.getResponseBuffer(25);
-    dtsu666Data[0].Pc = static_cast<float>((data[1] << 16) | data[0]);
-  }
-
-  result = node.readHoldingRegisters(0x202A, 10);
-  if (result == node.ku8MBSuccess)
-  {
-    data[0] = node.getResponseBuffer(0);
-    data[1] = node.getResponseBuffer(1);
-    dtsu666Data[0].Pft = static_cast<float>((data[1] << 16) | data[0]);
-    data[0] = node.getResponseBuffer(2);
-    data[1] = node.getResponseBuffer(3);
-    dtsu666Data[0].Pfa = static_cast<float>((data[1] << 16) | data[0]);
-    data[0] = node.getResponseBuffer(4);
-    data[1] = node.getResponseBuffer(5);
-    dtsu666Data[0].Pfb = static_cast<float>((data[1] << 16) | data[0]);
-    data[0] = node.getResponseBuffer(6);
-    data[1] = node.getResponseBuffer(7);
-    dtsu666Data[0].Pfc = static_cast<float>((data[1] << 16) | data[0]);
-    data[0] = node.getResponseBuffer(8);
-    data[1] = node.getResponseBuffer(9);
-    dtsu666Data[0].Freq = static_cast<float>((data[1] << 16) | data[0]);
-  }
-
-  result = node.readHoldingRegisters(0x202A, 8);
-  if (result == node.ku8MBSuccess)
-  {
-    data[0] = node.getResponseBuffer(0);
-    data[1] = node.getResponseBuffer(1);
-    dtsu666Data[0].Pft = static_cast<float>((data[1] << 16) | data[0]);
-    data[0] = node.getResponseBuffer(2);
-    data[1] = node.getResponseBuffer(3);
-    dtsu666Data[0].Pfa = static_cast<float>((data[1] << 16) | data[0]);
-    data[0] = node.getResponseBuffer(4);
-    data[1] = node.getResponseBuffer(5);
-    dtsu666Data[0].Pfb = static_cast<float>((data[1] << 16) | data[0]);
-    data[0] = node.getResponseBuffer(6);
-    data[1] = node.getResponseBuffer(7);
-    dtsu666Data[0].Pfc = static_cast<float>((data[1] << 16) | data[0]);
-  }
-
-  result = node.readHoldingRegisters(0x2044, 2);
-  if (result == node.ku8MBSuccess)
-  {
-    data[0] = node.getResponseBuffer(0);
-    data[1] = node.getResponseBuffer(1);
-    dtsu666Data[0].Freq = static_cast<float>((data[1] << 16) | data[0]);
-  }
-
-  result = node.readHoldingRegisters(0x101E, 2);
-  if (result == node.ku8MBSuccess)
-  {
-    data[0] = node.getResponseBuffer(0);
-    data[1] = node.getResponseBuffer(1);
-    dtsu666Data[0].ImpEp = static_cast<float>((data[1] << 16) | data[0]);
-  }
-
-  result = node.readHoldingRegisters(0x1028, 2);
-  if (result == node.ku8MBSuccess)
-  {
-    data[0] = node.getResponseBuffer(0);
-    data[1] = node.getResponseBuffer(1);
-    dtsu666Data[0].ExpEp = static_cast<float>((data[1] << 16) | data[0]);
-  }
-
-  /**
-   * @brief Node1
-  */
-  result = node1.readHoldingRegisters(0x2000, 26);
-  if (result == node1.ku8MBSuccess)
-  {
-    data[0] = node1.getResponseBuffer(0);
-    data[1] = node1.getResponseBuffer(1);
-    dtsu666Data[1].Uab = static_cast<float>((data[1] << 16) | data[0]);
-    data[0] = node1.getResponseBuffer(2);
-    data[1] = node1.getResponseBuffer(3);
-    dtsu666Data[1].Ubc = static_cast<float>((data[1] << 16) | data[0]);
-    data[0] = node1.getResponseBuffer(4);
-    data[1] = node1.getResponseBuffer(5);
-    dtsu666Data[1].Uca = static_cast<float>((data[1] << 16) | data[0]);
-    data[0] = node1.getResponseBuffer(6);
-    data[1] = node1.getResponseBuffer(7);
-    dtsu666Data[1].Ua = static_cast<float>((data[1] << 16) | data[0]);
-    data[0] = node1.getResponseBuffer(8);
-    data[1] = node1.getResponseBuffer(9);
-    dtsu666Data[1].Ub = static_cast<float>((data[1] << 16) | data[0]);
-    data[0] = node1.getResponseBuffer(10);
-    data[1] = node1.getResponseBuffer(11);
-    dtsu666Data[1].Uc = static_cast<float>((data[1] << 16) | data[0]);
-    data[0] = node1.getResponseBuffer(12);
-    data[1] = node1.getResponseBuffer(13);
-    dtsu666Data[1].Ia = static_cast<float>((data[1] << 16) | data[0]);
-    data[0] = node1.getResponseBuffer(14);
-    data[1] = node1.getResponseBuffer(15);
-    dtsu666Data[1].Ib = static_cast<float>((data[1] << 16) | data[0]);
-    data[0] = node1.getResponseBuffer(16);
-    data[1] = node1.getResponseBuffer(17);
-    dtsu666Data[1].Ic = static_cast<float>((data[1] << 16) | data[0]);
-    data[0] = node1.getResponseBuffer(18);
-    data[1] = node1.getResponseBuffer(19);
-    dtsu666Data[1].Pt = static_cast<float>((data[1] << 16) | data[0]);
-    data[0] = node1.getResponseBuffer(20);
-    data[1] = node1.getResponseBuffer(21);
-    dtsu666Data[1].Pa = static_cast<float>((data[1] << 16) | data[0]);
-    data[0] = node1.getResponseBuffer(22);
-    data[1] = node1.getResponseBuffer(23);
-    dtsu666Data[1].Pb = static_cast<float>((data[1] << 16) | data[0]);
-    data[0] = node1.getResponseBuffer(24);
-    data[1] = node1.getResponseBuffer(25);
-    dtsu666Data[1].Pc = static_cast<float>((data[1] << 16) | data[0]);
-  }
-
-  result = node1.readHoldingRegisters(0x202A, 10);
-  if (result == node1.ku8MBSuccess)
-  {
-    data[0] = node1.getResponseBuffer(0);
-    data[1] = node1.getResponseBuffer(1);
-    dtsu666Data[1].Pft = static_cast<float>((data[1] << 16) | data[0]);
-    data[0] = node1.getResponseBuffer(2);
-    data[1] = node1.getResponseBuffer(3);
-    dtsu666Data[1].Pfa = static_cast<float>((data[1] << 16) | data[0]);
-    data[0] = node1.getResponseBuffer(4);
-    data[1] = node1.getResponseBuffer(5);
-    dtsu666Data[1].Pfb = static_cast<float>((data[1] << 16) | data[0]);
-    data[0] = node1.getResponseBuffer(6);
-    data[1] = node1.getResponseBuffer(7);
-    dtsu666Data[1].Pfc = static_cast<float>((data[1] << 16) | data[0]);
-    data[0] = node1.getResponseBuffer(8);
-    data[1] = node1.getResponseBuffer(9);
-    dtsu666Data[1].Freq = static_cast<float>((data[1] << 16) | data[0]);
-  }
-
-  result = node1.readHoldingRegisters(0x202A, 8);
-  if (result == node1.ku8MBSuccess)
-  {
-    data[0] = node1.getResponseBuffer(0);
-    data[1] = node1.getResponseBuffer(1);
-    dtsu666Data[1].Pft = static_cast<float>((data[1] << 16) | data[0]);
-    data[0] = node1.getResponseBuffer(2);
-    data[1] = node1.getResponseBuffer(3);
-    dtsu666Data[1].Pfa = static_cast<float>((data[1] << 16) | data[0]);
-    data[0] = node1.getResponseBuffer(4);
-    data[1] = node1.getResponseBuffer(5);
-    dtsu666Data[1].Pfb = static_cast<float>((data[1] << 16) | data[0]);
-    data[0] = node1.getResponseBuffer(6);
-    data[1] = node1.getResponseBuffer(7);
-    dtsu666Data[1].Pfc = static_cast<float>((data[1] << 16) | data[0]);
-  }
-
-  result = node1.readHoldingRegisters(0x2044, 2);
-  if (result == node1.ku8MBSuccess)
-  {
-    data[0] = node1.getResponseBuffer(0);
-    data[1] = node1.getResponseBuffer(1);
-    dtsu666Data[1].Freq = static_cast<float>((data[1] << 16) | data[0]);
-  }
-
-  result = node1.readHoldingRegisters(0x101E, 2);
-  if (result == node1.ku8MBSuccess)
-  {
-    data[0] = node1.getResponseBuffer(0);
-    data[1] = node1.getResponseBuffer(1);
-    dtsu666Data[1].ImpEp = static_cast<float>((data[1] << 16) | data[0]);
-  }
-
-  result = node1.readHoldingRegisters(0x1028, 2);
-  if (result == node1.ku8MBSuccess)
-  {
-    data[0] = node1.getResponseBuffer(0);
-    data[1] = node1.getResponseBuffer(1);
-    dtsu666Data[1].ExpEp = static_cast<float>((data[1] << 16) | data[0]);
-  }
-
+  
   // if(isTriggered)
   // {
-  //   if (mode >= 2)
-  //   {
-  //     mode = 0;
-  //   }
+  //   // if (mode >= 2)
+  //   // {
+  //   //   mode = 0;
+  //   // }
   //   SerialPort.println("==========Frequency Measurement===========");
   //   SerialPort.println("Measurement : " + String(number));
     
@@ -1000,5 +963,224 @@ void loop() {
   //   SerialPort.println("==================End=====================");
   //   isTriggered = false;
   //   number++;
+  // }
+}
+
+void temp()
+{
+  // uint8_t result;
+  // uint16_t data[2];
+   
+  // result = node.readHoldingRegisters(0x2000, 26);
+  // if (result == node.ku8MBSuccess)
+  // {
+  //   data[0] = node.getResponseBuffer(0);
+  //   data[1] = node.getResponseBuffer(1);
+  //   dtsu666Data[0].Uab = static_cast<float>((data[1] << 16) | data[0]);
+  //   data[0] = node.getResponseBuffer(2);
+  //   data[1] = node.getResponseBuffer(3);
+  //   dtsu666Data[0].Ubc = static_cast<float>((data[1] << 16) | data[0]);
+  //   data[0] = node.getResponseBuffer(4);
+  //   data[1] = node.getResponseBuffer(5);
+  //   dtsu666Data[0].Uca = static_cast<float>((data[1] << 16) | data[0]);
+  //   data[0] = node.getResponseBuffer(6);
+  //   data[1] = node.getResponseBuffer(7);
+  //   dtsu666Data[0].Ua = static_cast<float>((data[1] << 16) | data[0]);
+  //   data[0] = node.getResponseBuffer(8);
+  //   data[1] = node.getResponseBuffer(9);
+  //   dtsu666Data[0].Ub = static_cast<float>((data[1] << 16) | data[0]);
+  //   data[0] = node.getResponseBuffer(10);
+  //   data[1] = node.getResponseBuffer(11);
+  //   dtsu666Data[0].Uc = static_cast<float>((data[1] << 16) | data[0]);
+  //   data[0] = node.getResponseBuffer(12);
+  //   data[1] = node.getResponseBuffer(13);
+  //   dtsu666Data[0].Ia = static_cast<float>((data[1] << 16) | data[0]);
+  //   data[0] = node.getResponseBuffer(14);
+  //   data[1] = node.getResponseBuffer(15);
+  //   dtsu666Data[0].Ib = static_cast<float>((data[1] << 16) | data[0]);
+  //   data[0] = node.getResponseBuffer(16);
+  //   data[1] = node.getResponseBuffer(17);
+  //   dtsu666Data[0].Ic = static_cast<float>((data[1] << 16) | data[0]);
+  //   data[0] = node.getResponseBuffer(18);
+  //   data[1] = node.getResponseBuffer(19);
+  //   dtsu666Data[0].Pt = static_cast<float>((data[1] << 16) | data[0]);
+  //   data[0] = node.getResponseBuffer(20);
+  //   data[1] = node.getResponseBuffer(21);
+  //   dtsu666Data[0].Pa = static_cast<float>((data[1] << 16) | data[0]);
+  //   data[0] = node.getResponseBuffer(22);
+  //   data[1] = node.getResponseBuffer(23);
+  //   dtsu666Data[0].Pb = static_cast<float>((data[1] << 16) | data[0]);
+  //   data[0] = node.getResponseBuffer(24);
+  //   data[1] = node.getResponseBuffer(25);
+  //   dtsu666Data[0].Pc = static_cast<float>((data[1] << 16) | data[0]);
+  // }
+
+  // result = node.readHoldingRegisters(0x202A, 10);
+  // if (result == node.ku8MBSuccess)
+  // {
+  //   data[0] = node.getResponseBuffer(0);
+  //   data[1] = node.getResponseBuffer(1);
+  //   dtsu666Data[0].Pft = static_cast<float>((data[1] << 16) | data[0]);
+  //   data[0] = node.getResponseBuffer(2);
+  //   data[1] = node.getResponseBuffer(3);
+  //   dtsu666Data[0].Pfa = static_cast<float>((data[1] << 16) | data[0]);
+  //   data[0] = node.getResponseBuffer(4);
+  //   data[1] = node.getResponseBuffer(5);
+  //   dtsu666Data[0].Pfb = static_cast<float>((data[1] << 16) | data[0]);
+  //   data[0] = node.getResponseBuffer(6);
+  //   data[1] = node.getResponseBuffer(7);
+  //   dtsu666Data[0].Pfc = static_cast<float>((data[1] << 16) | data[0]);
+  //   data[0] = node.getResponseBuffer(8);
+  //   data[1] = node.getResponseBuffer(9);
+  //   dtsu666Data[0].Freq = static_cast<float>((data[1] << 16) | data[0]);
+  // }
+
+  // result = node.readHoldingRegisters(0x202A, 8);
+  // if (result == node.ku8MBSuccess)
+  // {
+  //   data[0] = node.getResponseBuffer(0);
+  //   data[1] = node.getResponseBuffer(1);
+  //   dtsu666Data[0].Pft = static_cast<float>((data[1] << 16) | data[0]);
+  //   data[0] = node.getResponseBuffer(2);
+  //   data[1] = node.getResponseBuffer(3);
+  //   dtsu666Data[0].Pfa = static_cast<float>((data[1] << 16) | data[0]);
+  //   data[0] = node.getResponseBuffer(4);
+  //   data[1] = node.getResponseBuffer(5);
+  //   dtsu666Data[0].Pfb = static_cast<float>((data[1] << 16) | data[0]);
+  //   data[0] = node.getResponseBuffer(6);
+  //   data[1] = node.getResponseBuffer(7);
+  //   dtsu666Data[0].Pfc = static_cast<float>((data[1] << 16) | data[0]);
+  // }
+
+  // result = node.readHoldingRegisters(0x2044, 2);
+  // if (result == node.ku8MBSuccess)
+  // {
+  //   data[0] = node.getResponseBuffer(0);
+  //   data[1] = node.getResponseBuffer(1);
+  //   dtsu666Data[0].Freq = static_cast<float>((data[1] << 16) | data[0]);
+  // }
+
+  // result = node.readHoldingRegisters(0x101E, 2);
+  // if (result == node.ku8MBSuccess)
+  // {
+  //   data[0] = node.getResponseBuffer(0);
+  //   data[1] = node.getResponseBuffer(1);
+  //   dtsu666Data[0].ImpEp = static_cast<float>((data[1] << 16) | data[0]);
+  // }
+
+  // result = node.readHoldingRegisters(0x1028, 2);
+  // if (result == node.ku8MBSuccess)
+  // {
+  //   data[0] = node.getResponseBuffer(0);
+  //   data[1] = node.getResponseBuffer(1);
+  //   dtsu666Data[0].ExpEp = static_cast<float>((data[1] << 16) | data[0]);
+  // }
+
+  /**
+   * @brief Node1
+  */
+  // result = node1.readHoldingRegisters(0x2000, 26);
+  // if (result == node1.ku8MBSuccess)
+  // {
+  //   data[0] = node1.getResponseBuffer(0);
+  //   data[1] = node1.getResponseBuffer(1);
+  //   dtsu666Data[1].Uab = static_cast<float>((data[1] << 16) | data[0]);
+  //   data[0] = node1.getResponseBuffer(2);
+  //   data[1] = node1.getResponseBuffer(3);
+  //   dtsu666Data[1].Ubc = static_cast<float>((data[1] << 16) | data[0]);
+  //   data[0] = node1.getResponseBuffer(4);
+  //   data[1] = node1.getResponseBuffer(5);
+  //   dtsu666Data[1].Uca = static_cast<float>((data[1] << 16) | data[0]);
+  //   data[0] = node1.getResponseBuffer(6);
+  //   data[1] = node1.getResponseBuffer(7);
+  //   dtsu666Data[1].Ua = static_cast<float>((data[1] << 16) | data[0]);
+  //   data[0] = node1.getResponseBuffer(8);
+  //   data[1] = node1.getResponseBuffer(9);
+  //   dtsu666Data[1].Ub = static_cast<float>((data[1] << 16) | data[0]);
+  //   data[0] = node1.getResponseBuffer(10);
+  //   data[1] = node1.getResponseBuffer(11);
+  //   dtsu666Data[1].Uc = static_cast<float>((data[1] << 16) | data[0]);
+  //   data[0] = node1.getResponseBuffer(12);
+  //   data[1] = node1.getResponseBuffer(13);
+  //   dtsu666Data[1].Ia = static_cast<float>((data[1] << 16) | data[0]);
+  //   data[0] = node1.getResponseBuffer(14);
+  //   data[1] = node1.getResponseBuffer(15);
+  //   dtsu666Data[1].Ib = static_cast<float>((data[1] << 16) | data[0]);
+  //   data[0] = node1.getResponseBuffer(16);
+  //   data[1] = node1.getResponseBuffer(17);
+  //   dtsu666Data[1].Ic = static_cast<float>((data[1] << 16) | data[0]);
+  //   data[0] = node1.getResponseBuffer(18);
+  //   data[1] = node1.getResponseBuffer(19);
+  //   dtsu666Data[1].Pt = static_cast<float>((data[1] << 16) | data[0]);
+  //   data[0] = node1.getResponseBuffer(20);
+  //   data[1] = node1.getResponseBuffer(21);
+  //   dtsu666Data[1].Pa = static_cast<float>((data[1] << 16) | data[0]);
+  //   data[0] = node1.getResponseBuffer(22);
+  //   data[1] = node1.getResponseBuffer(23);
+  //   dtsu666Data[1].Pb = static_cast<float>((data[1] << 16) | data[0]);
+  //   data[0] = node1.getResponseBuffer(24);
+  //   data[1] = node1.getResponseBuffer(25);
+  //   dtsu666Data[1].Pc = static_cast<float>((data[1] << 16) | data[0]);
+  // }
+
+  // result = node1.readHoldingRegisters(0x202A, 10);
+  // if (result == node1.ku8MBSuccess)
+  // {
+  //   data[0] = node1.getResponseBuffer(0);
+  //   data[1] = node1.getResponseBuffer(1);
+  //   dtsu666Data[1].Pft = static_cast<float>((data[1] << 16) | data[0]);
+  //   data[0] = node1.getResponseBuffer(2);
+  //   data[1] = node1.getResponseBuffer(3);
+  //   dtsu666Data[1].Pfa = static_cast<float>((data[1] << 16) | data[0]);
+  //   data[0] = node1.getResponseBuffer(4);
+  //   data[1] = node1.getResponseBuffer(5);
+  //   dtsu666Data[1].Pfb = static_cast<float>((data[1] << 16) | data[0]);
+  //   data[0] = node1.getResponseBuffer(6);
+  //   data[1] = node1.getResponseBuffer(7);
+  //   dtsu666Data[1].Pfc = static_cast<float>((data[1] << 16) | data[0]);
+  //   data[0] = node1.getResponseBuffer(8);
+  //   data[1] = node1.getResponseBuffer(9);
+  //   dtsu666Data[1].Freq = static_cast<float>((data[1] << 16) | data[0]);
+  // }
+
+  // result = node1.readHoldingRegisters(0x202A, 8);
+  // if (result == node1.ku8MBSuccess)
+  // {
+  //   data[0] = node1.getResponseBuffer(0);
+  //   data[1] = node1.getResponseBuffer(1);
+  //   dtsu666Data[1].Pft = static_cast<float>((data[1] << 16) | data[0]);
+  //   data[0] = node1.getResponseBuffer(2);
+  //   data[1] = node1.getResponseBuffer(3);
+  //   dtsu666Data[1].Pfa = static_cast<float>((data[1] << 16) | data[0]);
+  //   data[0] = node1.getResponseBuffer(4);
+  //   data[1] = node1.getResponseBuffer(5);
+  //   dtsu666Data[1].Pfb = static_cast<float>((data[1] << 16) | data[0]);
+  //   data[0] = node1.getResponseBuffer(6);
+  //   data[1] = node1.getResponseBuffer(7);
+  //   dtsu666Data[1].Pfc = static_cast<float>((data[1] << 16) | data[0]);
+  // }
+
+  // result = node1.readHoldingRegisters(0x2044, 2);
+  // if (result == node1.ku8MBSuccess)
+  // {
+  //   data[0] = node1.getResponseBuffer(0);
+  //   data[1] = node1.getResponseBuffer(1);
+  //   dtsu666Data[1].Freq = static_cast<float>((data[1] << 16) | data[0]);
+  // }
+
+  // result = node1.readHoldingRegisters(0x101E, 2);
+  // if (result == node1.ku8MBSuccess)
+  // {
+  //   data[0] = node1.getResponseBuffer(0);
+  //   data[1] = node1.getResponseBuffer(1);
+  //   dtsu666Data[1].ImpEp = static_cast<float>((data[1] << 16) | data[0]);
+  // }
+
+  // result = node1.readHoldingRegisters(0x1028, 2);
+  // if (result == node1.ku8MBSuccess)
+  // {
+  //   data[0] = node1.getResponseBuffer(0);
+  //   data[1] = node1.getResponseBuffer(1);
+  //   dtsu666Data[1].ExpEp = static_cast<float>((data[1] << 16) | data[0]);
   // }
 }

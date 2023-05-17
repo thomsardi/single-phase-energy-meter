@@ -93,7 +93,7 @@ void EnergyMeter::update(uint32_t intr_status)
 {
     if (intr_status & (BIT(_unit)))
     {
-        _energyMeterData.unit = _unit;
+        _energyMeterFrequency.unit = _unit;
         _mult++;
     }
 }
@@ -195,21 +195,24 @@ void EnergyMeter::calculate()
     int power;
     pcnt_get_counter_value(_pcnt_unit[_unit], &pulse);
     int frequency = (_mult*_highLimit) + pulse;
-    _energyMeterData.frequency = frequency;
+    _energyMeterFrequency.frequency = frequency;
     switch (_mode)
     {
         case 0:
-            current = static_cast<int>(frequency*1000*_coef_i);
-            _energyMeterData.current = current;
+            // current = static_cast<int>(frequency*1000*_coef_i);
+            // current = (frequency*1000*_coef_i);
+            _energyMeterFrequency.currentFrequency = frequency;
             break;
         case 1:
-            voltage = static_cast<int>(frequency*1000*_coef_v);
-            _energyMeterData.voltage = voltage;
+            // voltage = static_cast<int>(frequency*1000*_coef_v);
+            // voltage = (frequency*1000*_coef_v);
+            _energyMeterFrequency.voltageFrequency = frequency;
             break;
         
         default:
-            power = static_cast<int>(frequency*1000*_coef_p);
-            _energyMeterData.power = power;
+            // power = static_cast<int>(frequency*1000*_coef_p);
+            // power = (frequency*1000*_coef_p);
+            _energyMeterFrequency.powerFrequency = frequency;
     }
     _mult = 0;
 }
@@ -229,5 +232,11 @@ int EnergyMeter::getMode()
 */
 EnergyMeterData EnergyMeter::getEnergyMeterData()
 {
-    return _energyMeterData;
+    EnergyMeterData energyMeterData;
+    energyMeterData.unit = _energyMeterFrequency.unit;
+    energyMeterData.frequency = _energyMeterFrequency.frequency;
+    energyMeterData.current = _energyMeterFrequency.currentFrequency * 1000 * _coef_i;
+    energyMeterData.voltage = _energyMeterFrequency.voltageFrequency * 1000 * _coef_v;
+    energyMeterData.power = _energyMeterFrequency.powerFrequency * 1000 * _coef_p;
+    return energyMeterData;
 }

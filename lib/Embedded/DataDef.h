@@ -89,5 +89,12 @@ struct Command
     RelayData relayData;
 };
 
+enum TypeToken {
+    REQUEST_DATA = 1200,
+    REQUEST_PF = 1201,
+    REQUEST_FREQ = 1202,
+    REQUEST_IMPORT = 1203,
+    REQUEST_EXPORT = 1204
+};
 
 #endif

@@ -1,13 +1,13 @@
 #ifndef ENERGYMETERDATA_H
 #define ENERGYMETERDATA_H
 
-struct EnergyMeterData
+struct EnergyMeterFrequency
 {
     int unit;
     int frequency;
-    int voltage;
-    int current;
-    int power;
+    int voltageFrequency;
+    int currentFrequency;
+    int powerFrequency;
 };
 
 struct EnergyMeterCalibrator
@@ -15,6 +15,15 @@ struct EnergyMeterCalibrator
     float coef_v;
     float coef_i;
     float coef_p;
+};
+
+struct EnergyMeterData
+{
+    int unit;
+    int frequency;
+    int voltage;
+    int current;
+    int power;
 };
 
 #endif
