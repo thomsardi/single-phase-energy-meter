@@ -19,6 +19,7 @@
 #include <WebServerHandler.h>
 #include <ShiftRegister74HC595.h>
 #include <ModbusClientRTU.h>
+#include <ModbusBridgeWiFi.h>
 #include <Vector.h>
 
 #define READ_INTERVAL 20
@@ -27,7 +28,9 @@ JsonHandler jsonHandler(&Serial);
 // SerialHandler serialHandler(&Serial);
 SerialHandler serialHandler;
 ModbusClientRTU MB;
+ModbusBridgeWiFi MBbridge;
 uint32_t request_time;
+uint16_t port = 502;
 bool data_ready = false;
 
 const int numberOfShiftRegister = 8;
@@ -44,6 +47,8 @@ WebServerHandler webServerHandler;
 LineData lineData[64];
 Command command[16];
 Vector<Command> commandList(command);
+ModbusRequest modbusRequestStorage[16];
+Vector<ModbusRequest> modbusRequest(modbusRequestStorage);
 
 RelayControl relayControl;
 LedControl ledControl;
@@ -83,8 +88,10 @@ SemaphoreHandle_t myLock = xSemaphoreCreateMutex();
 
 const int internalLed = 2; //internal led pin
 
-const char *ssid = "RnD_Sundaya";
-const char *password = "sundaya22";
+// const char *ssid = "RnD_Sundaya";
+// const char *password = "sundaya22";
+const char *ssid = "POCO M4 Pro";
+const char *password = "thomaspoco";
 const String hostName = "RnD-BL-Board";
 
 String dataString;
@@ -254,6 +261,7 @@ void WiFiGotIP(WiFiEvent_t event, WiFiEventInfo_t info){
   Serial.println(WiFi.dnsIP(1));
   Serial.print("Hostname: ");
   Serial.println(WiFi.getHostname());
+  MBbridge.start(port, 4, 3000, 1);
 }
 
 void WiFiStationConnected(WiFiEvent_t event, WiFiEventInfo_t info){
@@ -297,6 +305,30 @@ void fillData(DTSU666_Data dtsuData[], ModbusMessage response, TypeToken typeTok
   int32_t high;
   switch (typeToken)
   {
+  case TypeToken::REQUEST_VERSION:
+    dtsuData[index].id = serverId;
+    offset = response.get(offset, dtsuData[index].rev);
+    offset = response.get(offset, dtsuData[index].ucode);
+    offset = response.get(offset, dtsuData[index].clre);
+    offset = response.get(offset, dtsuData[index].net);
+    break;
+  case TypeToken::REQUEST_RATE:
+    dtsuData[index].id = serverId;
+    offset = response.get(offset, dtsuData[index].irAt);
+    offset = response.get(offset, dtsuData[index].urAt);
+    break;
+  case TypeToken::REQUEST_DISPLAY:
+    dtsuData[index].id = serverId;
+    offset = response.get(offset, dtsuData[index].disp);
+    offset = response.get(offset, dtsuData[index].blcd);
+    offset = response.get(offset, dtsuData[index].endian);
+    break;
+  case TypeToken::REQUEST_PROTOCOL:
+    dtsuData[index].id = serverId;
+    offset = response.get(offset, dtsuData[index].protocol);
+    offset = response.get(offset, dtsuData[index].baud);
+    offset = response.get(offset, dtsuData[index].addr);
+    break;
   case TypeToken::REQUEST_DATA:
     dtsuData[index].id = serverId;
     offset = response.get(offset, dtsuData[index].Uab);
@@ -351,10 +383,10 @@ void IRAM_ATTR serialInterrupt() {
 
 void handleData(ModbusMessage response, uint32_t token)
 {
-  // Serial.printf("Response: serverID=%d, FC=%d, Token=%08X, length=%d:\n", response.getServerID(), response.getFunctionCode(), token, response.size());
-  // for (auto& byte : response) {
-  //   Serial.printf("%02X ", byte);
-  // }
+  Serial.printf("Response: serverID=%d, FC=%d, Token=%08X, length=%d:\n", response.getServerID(), response.getFunctionCode(), token, response.size());
+  for (auto& byte : response) {
+    Serial.printf("%02X ", byte);
+  }
   TypeToken t = static_cast<TypeToken>(token);
   fillData(dtsu666Data, response, t);
   // Serial.println("");
@@ -512,12 +544,12 @@ void modbusTask(void* parameter)
   {
     if(isReady)
     {
-      if (token > 1204)
+      if (token > 1208)
       {
         token = 1200;
         slaveId++;
       }
-      if(slaveId > 8)
+      if(slaveId > 1)
       {
         slaveId = 1;
       }
@@ -526,6 +558,22 @@ void modbusTask(void* parameter)
       int numberRegister;
       switch (t)
       {
+      case TypeToken::REQUEST_VERSION :
+        registerAddress = 0x0;
+        numberRegister = 4;
+        break;
+      case TypeToken::REQUEST_RATE :
+        registerAddress = 0x6;
+        numberRegister = 2;
+        break;
+      case TypeToken::REQUEST_DISPLAY :
+        registerAddress = 0xA;
+        numberRegister = 3;
+        break;
+      case TypeToken::REQUEST_PROTOCOL :
+        registerAddress = 0x2C;
+        numberRegister = 3;
+        break;
       case TypeToken::REQUEST_DATA :
         registerAddress = 0x2000;
         numberRegister = 26;
@@ -551,16 +599,39 @@ void modbusTask(void* parameter)
         numberRegister = 26;
         break;
       }
-      Error err = MB.addRequest(t, slaveId, READ_HOLD_REGISTER, registerAddress, numberRegister);
-      if (err!=SUCCESS) {
-        ModbusError e(err);
-        // Serial.println((const char*) e);
-        // LOG_E("Error creating request: %02X - %s\n", (int)e, (const char *)e);
-      }
-      else
-      {
-        token++;
-      }
+      
+      // if(modbusRequest.size() > 0)
+      // {
+      //   ModbusRequest mr = modbusRequest.front();
+      //   uint8_t count = mr.registerCount*2;
+        
+      //   // uint16_t wData[] = { 0x1111, 0x2222, 0x3333, 0x4444, 0x5555, 0x6666 };
+
+      //   // Error err = MB.addRequest(1300, 1, WRITE_MULT_REGISTERS, 33, 6, 12, wData);
+      //   Error err = MB.addRequest(mr.token, mr.slaveId, mr.fc, mr.registerLocation, mr.registerCount, count, mr.modbusData);
+      //   if (err!=SUCCESS) {
+      //     ModbusError e(err);
+      //     Serial.println((const char*) e);
+      //     // LOG_E("Error creating request: %02X - %s\n", (int)e, (const char *)e);
+      //   }
+      //   else
+      //   {
+      //     modbusRequest.remove(0);
+      //   }
+      // }
+      // else
+      // {
+      //   Error err = MB.addRequest(t, slaveId, READ_HOLD_REGISTER, registerAddress, numberRegister);
+      //   if (err!=SUCCESS) {
+      //     ModbusError e(err);
+      //     // Serial.println((const char*) e);
+      //     // LOG_E("Error creating request: %02X - %s\n", (int)e, (const char *)e);
+      //   }
+      //   else
+      //   {
+      //     token++;
+      //   }
+      // }      
     }
     vTaskDelay(pdMS_TO_TICKS(200));
   }
@@ -684,6 +755,13 @@ void setup() {
   Serial2.begin(9600);
   MB.begin(Serial2, 1);
 
+  for (size_t i = 1; i < 247; i++)
+  {
+      MBbridge.attachServer(i, i, ANY_FUNCTION_CODE, &MB);
+  }
+  
+  MBbridge.listServer();
+  
   
 
   // serialQueueHandle = xQueueCreate(queueSize, sizeof(uint8_t));
@@ -778,8 +856,29 @@ void setup() {
     Serial.println("POST Request Line Data");
     String response;
     String input = json.as<String>();
-    if (webServerHandler.processRelayRequest(input, response, commandList) > 0)
+    if (webServerHandler.processRelayRequest(input.c_str(), response, commandList) > 0)
     {    
+      request->send(200, "application/json", response);
+    }
+    else
+    {
+      request->send(400);
+    }
+    });
+
+  AsyncCallbackJsonWebHandler *setModbusHandler = new AsyncCallbackJsonWebHandler("/write-dtsu666", [](AsyncWebServerRequest *request, JsonVariant &json)
+  {
+    Serial.println("POST Modbus Write");
+    String response;
+    String input = json.as<String>();
+    ModbusRequest mr;
+    if (jsonHandler.httpModbusWrite(input.c_str(),mr, response))
+    {    
+      Serial.println("ID : " + String(mr.slaveId));
+      Serial.println("FC : " + String(mr.fc));
+      Serial.println("Location : " + String(mr.registerLocation));
+      Serial.println("Number : " + String(mr.registerCount));
+      modbusRequest.push_back(mr);
       request->send(200, "application/json", response);
     }
     else
@@ -821,6 +920,7 @@ void setup() {
 
   // server.addHandler(setRelayHttpHandler);
   server.addHandler(setRelayHandler);
+  server.addHandler(setModbusHandler);
   server.begin();
 
   // initPcnt(cfPin, 0, highLimit, PCNT_UNIT_0, PCNT_CHANNEL_0); // pulse counter for active power

@@ -1,0 +1,112 @@
+{
+    "client": "Thunder Client",
+    "collectionName": "SDB V1",
+    "dateExported": "2023-12-08T02:49:48.532Z",
+    "version": "1.1",
+    "folders": [],
+    "requests": [
+        {
+            "_id": "4b1a26ba-1bad-40ca-88d9-4faa9e4f58c8",
+            "colId": "537baadc-ad20-4071-b481-3e53c280bf83",
+            "containerId": "",
+            "name": "get-dtsu666-data",
+            "url": "get-dtsu666-data?id=1",
+            "method": "GET",
+            "sortNum": 10000,
+            "created": "2023-05-15T08:25:19.304Z",
+            "modified": "2023-05-22T01:58:53.839Z",
+            "headers": [],
+            "params": [
+                {
+                    "name": "id",
+                    "value": "1",
+                    "isPath": false
+                }
+            ],
+            "tests": []
+        },
+        {
+            "_id": "2f30360b-8393-461a-ae7e-12f56ebfe508",
+            "colId": "537baadc-ad20-4071-b481-3e53c280bf83",
+            "containerId": "",
+            "name": "get-data",
+            "url": "get-data?id=0,1,2",
+            "method": "GET",
+            "sortNum": 20000,
+            "created": "2023-05-15T08:25:34.039Z",
+            "modified": "2023-05-15T08:27:01.482Z",
+            "headers": [],
+            "params": [
+                {
+                    "name": "id",
+                    "value": "0,1,2",
+                    "isPath": false
+                }
+            ],
+            "tests": []
+        },
+        {
+            "_id": "dede4588-9ae1-4cba-9d91-6c905844b7d5",
+            "colId": "537baadc-ad20-4071-b481-3e53c280bf83",
+            "containerId": "",
+            "name": "get-relay-status",
+            "url": "get-relay-status?id=0,1,2,3,4,5,6,7",
+            "method": "GET",
+            "sortNum": 30000,
+            "created": "2023-05-15T08:25:56.239Z",
+            "modified": "2023-05-15T08:27:12.600Z",
+            "headers": [],
+            "params": [
+                {
+                    "name": "id",
+                    "value": "0,1,2,3,4,5,6,7",
+                    "isPath": false
+                }
+            ],
+            "tests": []
+        },
+        {
+            "_id": "583440c9-95c8-4af1-9e31-0758c70f43c0",
+            "colId": "537baadc-ad20-4071-b481-3e53c280bf83",
+            "containerId": "",
+            "name": "relay",
+            "url": "relay",
+            "method": "POST",
+            "sortNum": 40000,
+            "created": "2023-05-15T08:26:07.439Z",
+            "modified": "2023-05-15T08:27:25.099Z",
+            "headers": [],
+            "params": [],
+            "body": {
+                "type": "json",
+                "raw": "{\n  \"data\" : [\n    {\n      \"line\" : 1,\n      \"value\" : 1\n    },\n    {\n      \"line\" : 2,\n      \"value\" : 1\n    },\n    {\n      \"line\" : 3,\n      \"value\" : 1\n    }\n  ]\n}",
+                "form": []
+            },
+            "tests": []
+        },
+        {
+            "_id": "ddc5e96e-e574-4113-9f7b-0d3192f5b739",
+            "colId": "537baadc-ad20-4071-b481-3e53c280bf83",
+            "containerId": "",
+            "name": "write-dtsu666",
+            "url": "write-dtsu666",
+            "method": "POST",
+            "sortNum": 50000,
+            "created": "2023-05-22T02:46:04.909Z",
+            "modified": "2023-05-22T04:45:22.260Z",
+            "headers": [],
+            "params": [],
+            "body": {
+                "type": "json",
+                "raw": "{\n  \"id\" : 1,\n  \"code\" : 16,\n  \"register\" : 8,\n  \"value\" : [\n    21123\n    ]\n}",
+                "form": []
+            },
+            "tests": []
+        }
+    ],
+    "settings": {
+        "options": {
+            "baseUrl": "http://192.168.2.115/"
+        }
+    }
+}

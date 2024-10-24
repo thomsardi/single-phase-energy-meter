@@ -91,6 +91,18 @@ bool JsonHandler::httpDtsu666Data(AsyncWebServerRequest *request, const JsonHead
                     data_0["id"] = dtsu666Data[i].id;
                     data_0["device_name"] = dtsu666Data[i].deviceName;
                     JsonObject data_0_device_data_0 = data_0["device_data"].createNestedObject();
+                    data_0_device_data_0["rev"] = dtsu666Data[i].rev;
+                    data_0_device_data_0["ucode"] = dtsu666Data[i].ucode;
+                    data_0_device_data_0["clre"] = dtsu666Data[i].clre;
+                    data_0_device_data_0["net"] = dtsu666Data[i].net;
+                    data_0_device_data_0["ir_at"] = dtsu666Data[i].irAt;
+                    data_0_device_data_0["ur_at"] = dtsu666Data[i].urAt;
+                    data_0_device_data_0["disp"] = dtsu666Data[i].disp;
+                    data_0_device_data_0["blcd"] = dtsu666Data[i].blcd;
+                    data_0_device_data_0["endian"] = dtsu666Data[i].endian;
+                    data_0_device_data_0["protocol"] = dtsu666Data[i].protocol;
+                    data_0_device_data_0["baud"] = dtsu666Data[i].baud;
+                    data_0_device_data_0["addr"] = dtsu666Data[i].addr;
                     data_0_device_data_0["line_voltage_a_b"] = dtsu666Data[i].Uab;
                     data_0_device_data_0["line_voltage_b_c"] = dtsu666Data[i].Ubc;
                     data_0_device_data_0["line_voltage_c_a"] = dtsu666Data[i].Uca;
@@ -214,6 +226,63 @@ bool JsonHandler::httpRelayWrite(const char* input, String &output)
     // _serial->println(output);
     return 1;
 }
+
+bool JsonHandler::httpModbusWrite(const char* input, ModbusRequest &modbusRequest, String &output)
+{
+    // String input;
+
+    StaticJsonDocument<384> doc;
+
+    DeserializationError error = deserializeJson(doc, input);
+
+    if (error) {
+        Serial.print("deserializeJson() failed: ");
+        Serial.println(error.c_str());
+        return 0;
+    }
+
+    if (!doc.containsKey("id"))
+    {
+        return 0;
+    }
+
+    if (!doc.containsKey("code"))
+    {
+        return 0;
+    }
+
+    if (!doc.containsKey("register"))
+    {
+        return 0;
+    }
+    if (!doc.containsKey("value"))
+    {
+        return 0;
+    }
+    modbusRequest.slaveId = doc["id"]; // 1
+    modbusRequest.fc = static_cast<Modbus::FunctionCode>(doc["code"]); // 16
+    modbusRequest.registerLocation = doc["register"]; // 3
+    modbusRequest.modbusData = _modbusData;
+    JsonArray value = doc["value"];
+    int i = 0;
+    for(uint16_t v : value)
+    {
+        modbusRequest.modbusData[i] = v;
+        i++;
+    }
+
+    modbusRequest.registerCount = i;
+    // modbusRequest.modbusData = doc["value"]; // 5000
+
+    StaticJsonDocument<16> docResponse;
+
+    docResponse["status"] = 1;
+
+    serializeJson(docResponse, output);
+
+    return 1;
+}
+
 
 String JsonHandler::httpResponseOk()
 {

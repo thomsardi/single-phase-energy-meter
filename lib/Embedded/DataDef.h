@@ -5,6 +5,8 @@
 #include <SerialData.h>
 #include <JsonData.h>
 #include <EnergyMeterData.h>
+#include <ModbusTypeDefs.h>
+#include <Vector.h>
 
 struct RelayStatus {
     union {
@@ -42,6 +44,18 @@ struct JsonData
 
 struct DTSU666_Data{
     uint counter;
+    uint16_t rev;
+    uint16_t ucode;
+    uint16_t clre;
+    uint16_t net;
+    uint16_t irAt;
+    uint16_t urAt;
+    uint16_t disp;
+    uint16_t blcd;
+    uint16_t endian;
+    uint16_t protocol;
+    uint16_t baud;
+    uint16_t addr;
     uint8_t id;
     String deviceName;
     float Uab, Ubc, Uca;
@@ -90,11 +104,24 @@ struct Command
 };
 
 enum TypeToken {
-    REQUEST_DATA = 1200,
-    REQUEST_PF = 1201,
-    REQUEST_FREQ = 1202,
-    REQUEST_IMPORT = 1203,
-    REQUEST_EXPORT = 1204
+    REQUEST_VERSION = 1200,
+    REQUEST_RATE = 1201,
+    REQUEST_DISPLAY = 1202,
+    REQUEST_PROTOCOL = 1203,
+    REQUEST_DATA = 1204,
+    REQUEST_PF = 1205,
+    REQUEST_FREQ = 1206,
+    REQUEST_IMPORT = 1207,
+    REQUEST_EXPORT = 1208
+};
+
+struct ModbusRequest {
+    TypeToken token;
+    uint8_t slaveId;
+    uint8_t fc;
+    uint16_t registerLocation;
+    uint16_t registerCount;
+    uint16_t *modbusData = nullptr;
 };
 
 #endif

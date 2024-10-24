@@ -26,12 +26,14 @@ class JsonHandler {
         bool httpDtsu666Data(AsyncWebServerRequest *request, const JsonHeader &jsonHeader, const DTSU666_Data dtsu666Data[], size_t dtsu666DataSize, String &buffer);
         bool httpBuildRelayStatus(AsyncWebServerRequest *request, const JsonHeader &jsonHeader, const JsonData jsonData[], size_t jsonDataSize, String &buffer);
         bool httpRelayWrite(const char* input, String &output);
+        bool httpModbusWrite(const char* input, ModbusRequest &modbusRequest, String &output);
         String httpResponseOk();
         static void merge(JsonObject dest, JsonObjectConst src);
     private :
         void parser(const String &input, char delimiter, Vector<String> &valueVec);
         bool isNumber(const String &input);
         Stream *_serial;
+        uint16_t _modbusData[32];
 };
 
 

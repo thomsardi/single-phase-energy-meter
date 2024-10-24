@@ -1,5 +1,7 @@
 {
     "id" : 1,
+    "code" : 16,
+    "register" : 2, 
     "data" : [
         {
             "line" : 1,

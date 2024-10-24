@@ -5,39 +5,22 @@
     "data": [
       {
         "counter": 0,
-        "id": 0,
-        "device_name": "device_name_0",
-        "device_data": [
-            {
-                "phase_voltage_a_b" : 1000,
-                "phase_voltage_b_c" : 2000,
-                "phase_voltage_c_a" : 3000,
-                "phase_voltage_a" : 100,
-                "phase_voltage_b" : 200,
-                "phase_voltage_c" : 300,
-                "phase_current_a" : 10,
-                "phase_current_b" : 20,
-                "phase_current_c" : 30,
-                "active_power" : 100000,
-                "active_power_a" : 10000,
-                "active_power_b" : 20000,
-                "active_power_c" : 30000,
-                "power_factor" : 12,
-                "power_factor_a" : 34,
-                "power_factor_b" : 56,
-                "power_factor_c" : 78,
-                "frequency" : 5000,
-                "import_energy" : 1234,
-                "export_energy" : 5678
-            }
-        ]
-      },
-      {
-        "counter": 0,
         "id": 1,
         "device_name": "device_name_1",
         "device_data": [
             {
+                "rev" : 1,
+                "ucode" : 1,
+                "clre" : 1,
+                "net" : 1,
+                "ir_at" : 999,
+                "ur_at" : 999,
+                "disp" : 30,
+                "blcd" : 0,
+                "endian" : 1,
+                "protocol" : 1,
+                "baud" : 1,
+                "addr" : 1,
                 "phase_voltage_a_b" : 1000,
                 "phase_voltage_b_c" : 2000,
                 "phase_voltage_c_a" : 3000,
@@ -67,151 +50,18 @@
         "device_name": "device_name_2",
         "device_data": [
             {
-                "phase_voltage_a_b" : 1000,
-                "phase_voltage_b_c" : 2000,
-                "phase_voltage_c_a" : 3000,
-                "phase_voltage_a" : 100,
-                "phase_voltage_b" : 200,
-                "phase_voltage_c" : 300,
-                "phase_current_a" : 10,
-                "phase_current_b" : 20,
-                "phase_current_c" : 30,
-                "active_power" : 100000,
-                "active_power_a" : 10000,
-                "active_power_b" : 20000,
-                "active_power_c" : 30000,
-                "power_factor" : 12,
-                "power_factor_a" : 34,
-                "power_factor_b" : 56,
-                "power_factor_c" : 78,
-                "frequency" : 5000,
-                "import_energy" : 1234,
-                "export_energy" : 5678
-            }
-        ]
-      },
-      {
-        "counter": 0,
-        "id": 3,
-        "device_name": "device_name_3",
-        "device_data": [
-            {
-                "phase_voltage_a_b" : 1000,
-                "phase_voltage_b_c" : 2000,
-                "phase_voltage_c_a" : 3000,
-                "phase_voltage_a" : 100,
-                "phase_voltage_b" : 200,
-                "phase_voltage_c" : 300,
-                "phase_current_a" : 10,
-                "phase_current_b" : 20,
-                "phase_current_c" : 30,
-                "active_power" : 100000,
-                "active_power_a" : 10000,
-                "active_power_b" : 20000,
-                "active_power_c" : 30000,
-                "power_factor" : 12,
-                "power_factor_a" : 34,
-                "power_factor_b" : 56,
-                "power_factor_c" : 78,
-                "frequency" : 5000,
-                "import_energy" : 1234,
-                "export_energy" : 5678
-            }
-        ]
-      },
-      {
-        "counter": 0,
-        "id": 4,
-        "device_name": "device_name_4",
-        "device_data": [
-            {
-                "phase_voltage_a_b" : 1000,
-                "phase_voltage_b_c" : 2000,
-                "phase_voltage_c_a" : 3000,
-                "phase_voltage_a" : 100,
-                "phase_voltage_b" : 200,
-                "phase_voltage_c" : 300,
-                "phase_current_a" : 10,
-                "phase_current_b" : 20,
-                "phase_current_c" : 30,
-                "active_power" : 100000,
-                "active_power_a" : 10000,
-                "active_power_b" : 20000,
-                "active_power_c" : 30000,
-                "power_factor" : 12,
-                "power_factor_a" : 34,
-                "power_factor_b" : 56,
-                "power_factor_c" : 78,
-                "frequency" : 5000,
-                "import_energy" : 1234,
-                "export_energy" : 5678
-            }
-        ]
-      },
-      {
-        "counter": 0,
-        "id": 5,
-        "device_name": "device_name_5",
-        "device_data": [
-            {
-                "phase_voltage_a_b" : 1000,
-                "phase_voltage_b_c" : 2000,
-                "phase_voltage_c_a" : 3000,
-                "phase_voltage_a" : 100,
-                "phase_voltage_b" : 200,
-                "phase_voltage_c" : 300,
-                "phase_current_a" : 10,
-                "phase_current_b" : 20,
-                "phase_current_c" : 30,
-                "active_power" : 100000,
-                "active_power_a" : 10000,
-                "active_power_b" : 20000,
-                "active_power_c" : 30000,
-                "power_factor" : 12,
-                "power_factor_a" : 34,
-                "power_factor_b" : 56,
-                "power_factor_c" : 78,
-                "frequency" : 5000,
-                "import_energy" : 1234,
-                "export_energy" : 5678
-            }
-        ]
-      },
-      {
-        "counter": 0,
-        "id": 6,
-        "device_name": "device_name_6",
-        "device_data": [
-            {
-                "phase_voltage_a_b" : 1000,
-                "phase_voltage_b_c" : 2000,
-                "phase_voltage_c_a" : 3000,
-                "phase_voltage_a" : 100,
-                "phase_voltage_b" : 200,
-                "phase_voltage_c" : 300,
-                "phase_current_a" : 10,
-                "phase_current_b" : 20,
-                "phase_current_c" : 30,
-                "active_power" : 100000,
-                "active_power_a" : 10000,
-                "active_power_b" : 20000,
-                "active_power_c" : 30000,
-                "power_factor" : 12,
-                "power_factor_a" : 34,
-                "power_factor_b" : 56,
-                "power_factor_c" : 78,
-                "frequency" : 5000,
-                "import_energy" : 1234,
-                "export_energy" : 5678
-            }
-        ]
-      },
-      {
-        "counter": 0,
-        "id": 7,
-        "device_name": "device_name_7",
-        "device_data": [
-            {
+                "rev" : 1,
+                "ucode" : 1,
+                "clre" : 1,
+                "net" : 1,
+                "ir_at" : 999,
+                "ur_at" : 999,
+                "disp" : 30,
+                "blcd" : 0,
+                "endian" : 1,
+                "protocol" : 1,
+                "baud" : 1,
+                "addr" : 1,
                 "phase_voltage_a_b" : 1000,
                 "phase_voltage_b_c" : 2000,
                 "phase_voltage_c_a" : 3000,
